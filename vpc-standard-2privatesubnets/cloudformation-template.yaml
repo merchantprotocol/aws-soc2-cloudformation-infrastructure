@@ -234,6 +234,75 @@ Resources:
       RouteTableId: !Ref myPrivateRouteTable2
       SubnetId: !Ref myPrivateSubnet2
 
+  RDSPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public Access To RDS Servers
+      VpcId: Ref: myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+          Description: Public to MySQL
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 0.0.0.0/0
+          Description: Public to Redshift
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 0.0.0.0/0
+
+  EC2PublicBastion:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public SSH Access To Bastion Server
+      VpcId: Ref: myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2222
+          ToPort: 2222
+          CidrIp: 0.0.0.0/0
+          Description: Public to SSH on Bastion
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 2222
+          ToPort: 2222
+          CidrIp: 0.0.0.0/0
+          
+  ELBPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public Access To ElasticLoadBalancers
+      VpcId: Ref: myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Public to Unsecure WebApp
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Public to Secure WebApp
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          
 ## =================== OUTPUTS =================== #
 Outputs:
   outputVPC:
