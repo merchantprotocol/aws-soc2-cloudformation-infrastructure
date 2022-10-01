@@ -496,7 +496,7 @@ Resources:
       AssociatePublicIpAddress: true
       ImageId: !Ref LatestAMI
       InstanceType: !Ref BastionInstanceType
-      KeyName: !Ref BastionKeyPair
+      KeyName: !Ref KeyPair
       SecurityGroups:
         - !Ref EC2PublicBastion
       
