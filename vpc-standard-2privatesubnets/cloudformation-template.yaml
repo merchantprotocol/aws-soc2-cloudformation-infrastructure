@@ -238,7 +238,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Public Access To RDS Servers
-      VpcId: Ref: MPVPC
+      VpcId: !Ref MPVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3306
@@ -264,7 +264,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Public SSH Access To Bastion Server
-      VpcId: Ref: MPVPC
+      VpcId: !Ref MPVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 2222
@@ -281,7 +281,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Public Access To ElasticLoadBalancers
-      VpcId: Ref: MPVPC
+      VpcId: !Ref MPVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
