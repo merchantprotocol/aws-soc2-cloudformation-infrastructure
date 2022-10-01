@@ -268,21 +268,21 @@ Resources:
   MPNatGateway1:
     Type: AWS::EC2::NatGateway
     Properties:
+      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
       SubnetId: !Ref MPPublicSubnet1
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
-#      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
 
    # Create a NAT Gateway in the public subnet for AZ 2
   MPNatGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
+      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
       SubnetId: !Ref MPPublicSubnet2
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
-#      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
 
   # c) Create a private route table for AZ 1
   MPPrivateRouteTable1:
