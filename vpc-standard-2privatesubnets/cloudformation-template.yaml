@@ -12,22 +12,27 @@ Parameters:
     Description: Enter the IP range (CIDR notation) for VPC
     Type: String
     Default: 10.0.0.0/16
+    
   paramPublicSubnet1CIDR:
     Description: Enter the IP range (CIDR notation)  for the public subnet in AZ A
     Type: String
     Default: 10.0.0.0/20
+    
   paramPublicSubnet2CIDR:
     Description: Enter the IP range (CIDR notation)  for the public subnet in AZ B
     Type: String
     Default: 10.0.16.0/20
+    
   paramPrivateSubnet1CIDR:
     Description: Enter the IP range (CIDR notation)  for the private subnet in AZ A
     Type: String
     Default: 10.0.128.0/20
+    
   paramPrivateSubnet2CIDR:
     Description: Enter the IP range (CIDR notation)  for the private subnet in AZ B
     Type: String
     Default: 10.0.144.0/20
+    
   paramUniqueName:
     Description: Give a unique name for "CloudFormationLab" tag value
     Type: String
@@ -39,15 +44,25 @@ Parameters:
     Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
     AllowedValues:
       - '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+      
   BastionInstanceType:
-    Description: Instance size for the Bastion Host (default - t3.micro)
+    Description: Instance size for the Bastion Host (default - t3.nano)
     Type: String 
-    AllowedValues:
-      - t3.micro
-    Default: t3.micro
+    AllowedValues: [t2.nano, t2.micro, t2.small, t2.medium, t2.large, t2.xlarge, t2.2xlarge,
+      t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+      m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge,
+      g3.8xlarge,
+      r5.large, r5.xlarge, r5.2xlarge, r5.4xlarge, r3.12xlarge,
+      i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge,
+      d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge]
+    Default: t3.nano
+    
   KeyPair:
     Description: Which Key Pair would you like to use for remote access?
     Type: 'AWS::EC2::KeyPair::KeyName'
+    
   BastionSshPort:
     Description: What port number would you like to use to connect to your Bastion Host over SSH?
     Type: Number
@@ -55,6 +70,20 @@ Parameters:
     MinValue: 2222
     MaxValue: 65535
 
+  WebAppInstanceType:
+    Description: Instance size for the WebApp Host (default - t3.nano)
+    Type: String 
+    AllowedValues: [t2.nano, t2.micro, t2.small, t2.medium, t2.large, t2.xlarge, t2.2xlarge,
+      t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+      m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge,
+      g3.8xlarge,
+      r5.large, r5.xlarge, r5.2xlarge, r5.4xlarge, r3.12xlarge,
+      i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge,
+      d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge]
+    Default: t3.nano
+    
 ## =================== METADATA =================== #
 Metadata:
 
@@ -496,6 +525,53 @@ Resources:
       AssociatePublicIpAddress: true
       ImageId: !Ref LatestAMI
       InstanceType: !Ref BastionInstanceType
+      KeyName: !Ref KeyPair
+      SecurityGroups:
+        - !Ref EC2PrivateAPPServers
+        
+        
+## =================== Web App =================== #
+  WebAppELB:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      AvailabilityZones: !GetAZs ''
+      CrossZone: 'true'
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '30'
+        Timeout: '5'
+      
+  WebAppASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "WebAppASG"]]
+      LaunchConfigurationName: !Ref WebAppLaunchConfig
+      VPCZoneIdentifier:
+        - !Ref MPPrivateSubnet1
+        - !Ref MPPrivateSubnet2
+      MinSize: "1"
+      DesiredCapacity: "1"
+      MaxSize: "1"
+      LoadBalancerNames: [!Ref 'WebAppELB']
+      Tags:
+        -
+          Key: Name
+          Value: !Join ["", [!Ref "AWS::StackName", "WebApp"]]
+          PropagateAtLaunch: true
+
+  WebAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Join ["", [!Ref "AWS::StackName", "WebAppLaunchConfiguration"]]
+      AssociatePublicIpAddress: true
+      ImageId: !Ref LatestAMI
+      InstanceType: !Ref WebAppInstanceType
       KeyName: !Ref KeyPair
       SecurityGroups:
         - !Ref EC2PublicBastion
