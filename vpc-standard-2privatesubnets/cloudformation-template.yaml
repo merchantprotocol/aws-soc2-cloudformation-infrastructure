@@ -32,6 +32,88 @@ Parameters:
     Description: Give a unique name for "CloudFormationLab" tag value
     Type: String
     Default: MerchantProtocolWebVPC
+    
+  LatestAMI:
+    Description: Static reference to latest Amazon Linux 2 AMI
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    AllowedValues:
+      - '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  BastionInstanceType:
+    Description: Instance size for the Bastion Host (default - t3.micro)
+    Type: String 
+    AllowedValues:
+      - t3.micro
+    Default: t3.micro
+  KeyPair:
+    Description: Which Key Pair would you like to use for remote access?
+    Type: 'AWS::EC2::KeyPair::KeyName'
+  BastionSshPort:
+    Description: What port number would you like to use to connect to your Bastion Host over SSH?
+    Type: Number
+    Default: 2222
+    MinValue: 2222
+    MaxValue: 65535
+
+## =================== METADATA =================== #
+Metadata:
+
+  Authors:
+    Description:  Jonathon Byrdziak (jonathon@merchantprotocol.com)
+
+  Purpose:
+    Description: "This template is used to create a stack that leverages private subnets 
+                  accessible by a bastion server for best practices in security on AWS.
+                  The associated security group provides secure access to the bastion host 
+                  based on the provided origin cidr block and SSH port.  SSH access to the 
+                  bastion host is granted using the default ec2-user credentials and the 
+                  keypair supplied via the KeyPair parameter."
+
+  License:
+    Description: 'Copyright 2022 Merchant Protocol
+                  Merchant Protocol Commercial License'
+                  
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "VPC Network Parameters"
+        Parameters:
+          - paramVpcCIDR
+          - paramPublicSubnet1CIDR
+          - paramPublicSubnet2CIDR
+          - paramPrivateSubnet1CIDR
+          - paramPrivateSubnet2CIDR
+          - paramUniqueName
+      -
+        Label:
+          default: "Bastion Host Parameters"
+        Parameters:
+          - KeyPair
+          - LatestAMI
+          - BastionInstanceType
+          - BastionSshPort
+    ParameterLabels:
+      paramVpcCIDR:
+        default: "VPC CIDR Block"
+      paramPublicSubnet1CIDR:
+        default: "Public 1 Subnet CIDR Block"
+      paramPublicSubnet2CIDR:
+        default: "Public 2 Subnet CIDR Block"
+      paramPrivateSubnet1CIDR:
+        default: "Private 1 Subnet CIDR Block"
+      paramPrivateSubnet2CIDR:
+        default: "Private 2 Subnet CIDR Block"
+      paramUniqueName:
+        default: "Key Pair"
+      KeyPair:
+        default: "Key Pair"
+      LatestAMI:
+        default: "AMI"
+      BastionInstanceType:
+        default: "Bastion Instance Type"
+      BastionSshPort:
+        default: "SSH Port Number"
 
 ## =================== RESOURCES =================== #
 Resources:
@@ -344,12 +426,12 @@ Resources:
           FromPort: 80
           ToPort: 80
           SourceSecurityGroupId: !Ref ELBPublic
-          Description: Public to Unsecure WebApp
+          Description: ELB to Unsecure WebApp
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           SourceSecurityGroupId: !Ref ELBPublic
-          Description: Public to Secure WebApp
+          Description: ELB to Secure WebApp
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
