@@ -122,6 +122,11 @@ Metadata:
           - LatestAMI
           - BastionInstanceType
           - BastionSshPort
+      -
+        Label:
+          default: "Web App Host Parameters"
+        Parameters:
+          - WebAppInstanceType
     ParameterLabels:
       paramUniqueName:
         default: "CloudFormation Name"
@@ -143,6 +148,8 @@ Metadata:
         default: "Bastion Instance Type"
       BastionSshPort:
         default: "SSH Port Number"
+      WebAppInstanceType:
+        default: "Web App Instance Type"
 
 ## =================== RESOURCES =================== #
 Resources:
