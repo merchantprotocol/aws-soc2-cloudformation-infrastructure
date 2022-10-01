@@ -272,9 +272,8 @@ Resources:
           FromPort: 5439
           ToPort: 5439
           CidrIp: 0.0.0.0/0
-        - IpProtocol: all
-          FromPort: all
-          ToPort: all
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
 
   EC2PublicBastion:
@@ -296,9 +295,8 @@ Resources:
           FromPort: 2222
           ToPort: 2222
           CidrIp: 0.0.0.0/0
-        - IpProtocol: all
-          FromPort: all
-          ToPort: all
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
           
   ELBPublic:
@@ -329,9 +327,8 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-        - IpProtocol: all
-          FromPort: all
-          ToPort: all
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
           
   EC2PrivateAPPServers:
@@ -362,9 +359,8 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-        - IpProtocol: all
-          FromPort: all
-          ToPort: all
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
           
   RDSPrivate:
@@ -387,9 +383,8 @@ Resources:
           SourceSecurityGroupId: !Ref EC2PrivateAPPServers
           Description: Private to Redshift
       SecurityGroupEgress:
-        - IpProtocol: all
-          FromPort: all
-          ToPort: all
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
           
 ## =================== OUTPUTS =================== #
