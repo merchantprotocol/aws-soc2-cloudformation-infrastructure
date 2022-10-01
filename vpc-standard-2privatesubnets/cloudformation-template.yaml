@@ -79,12 +79,12 @@ Metadata:
         Label:
           default: "VPC Network Parameters"
         Parameters:
+          - paramUniqueName
           - paramVpcCIDR
           - paramPublicSubnet1CIDR
           - paramPublicSubnet2CIDR
           - paramPrivateSubnet1CIDR
           - paramPrivateSubnet2CIDR
-          - paramUniqueName
       -
         Label:
           default: "Bastion Host Parameters"
@@ -94,6 +94,8 @@ Metadata:
           - BastionInstanceType
           - BastionSshPort
     ParameterLabels:
+      paramUniqueName:
+        default: "CloudFormation Name"
       paramVpcCIDR:
         default: "VPC CIDR Block"
       paramPublicSubnet1CIDR:
@@ -104,8 +106,6 @@ Metadata:
         default: "Private 1 Subnet CIDR Block"
       paramPrivateSubnet2CIDR:
         default: "Private 2 Subnet CIDR Block"
-      paramUniqueName:
-        default: "Key Pair"
       KeyPair:
         default: "Key Pair"
       LatestAMI:
@@ -361,6 +361,7 @@ Resources:
   EC2PublicBastion:
     Type: AWS::EC2::SecurityGroup
     Properties:
+      GroupName: !Join ["", [ !Ref "AWS::StackName", "BastionHostSecurityGroup"]]
       GroupDescription: Public SSH Access To Bastion Server
       VpcId: !Ref MPVPC
       Tags:
@@ -368,14 +369,14 @@ Resources:
           Value: EC2PublicBastion
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 2222
-          ToPort: 2222
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
           CidrIp: 0.0.0.0/0
           Description: Public to SSH on Bastion
       SecurityGroupEgress:
         - IpProtocol: tcp
-          FromPort: 2222
-          ToPort: 2222
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
           CidrIp: 0.0.0.0/0
         - Description: Allow all outbound traffic
           IpProtocol: "-1"
@@ -469,6 +470,36 @@ Resources:
           IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
           
+          
+## =================== BASTION =================== #
+  BastionASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "BastionHostASG"]]
+      LaunchConfigurationName: !Ref BastionLaunchConfig
+      VPCZoneIdentifier:
+        - !Ref MPPublicSubnet1
+        - !Ref MPPublicSubnet2
+      MinSize: "1"
+      DesiredCapacity: "1"
+      MaxSize: "1"
+      Tags:
+        -
+          Key: Name
+          Value: !Join ["", [!Ref "AWS::StackName", "BastionHost"]]
+          PropagateAtLaunch: true
+
+  BastionLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Join ["", [!Ref "AWS::StackName", "BastionHostLaunchConfiguration"]]
+      AssociatePublicIpAddress: true
+      ImageId: !Ref LatestAMI
+      InstanceType: !Ref BastionInstanceType
+      KeyName: !Ref BastionKeyPair
+      SecurityGroups:
+        - !Ref EC2PublicBastion
+      
 ## =================== OUTPUTS =================== #
 Outputs:
   outputVPC:
