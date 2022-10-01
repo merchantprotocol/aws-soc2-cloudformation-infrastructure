@@ -3,41 +3,41 @@ AWSTemplateFormatVersion: 2010-09-09
 
 ## =================== DESCRIPTION =================== #
 Description: >-
-  AWS CloudFormation sample template. 
-  Create a custom VPC with a pair of public and private subnets spread across two AZs
+  AWS CloudFormation Standard VPC Configuration for Web Application. 
+  Creates a custom VPC with a pair of public and private subnets spread across two AZs
 
 ## =================== PARAMETERS =================== #
 Parameters:
   paramVpcCIDR:
     Description: Enter the IP range (CIDR notation) for VPC
     Type: String
-    Default: 10.192.0.0/16
+    Default: 10.0.0.0/16
   paramPublicSubnet1CIDR:
     Description: Enter the IP range (CIDR notation)  for the public subnet in AZ A
     Type: String
-    Default: 10.192.10.0/24
+    Default: 10.0.0.0/20
   paramPublicSubnet2CIDR:
     Description: Enter the IP range (CIDR notation)  for the public subnet in AZ B
     Type: String
-    Default: 10.192.11.0/24
+    Default: 10.0.16.0/20
   paramPrivateSubnet1CIDR:
     Description: Enter the IP range (CIDR notation)  for the private subnet in AZ A
     Type: String
-    Default: 10.192.20.0/24
+    Default: 10.0.128.0/20
   paramPrivateSubnet2CIDR:
     Description: Enter the IP range (CIDR notation)  for the private subnet in AZ B
     Type: String
-    Default: 10.192.21.0/24
+    Default: 10.0.144.0/20
   paramUniqueName:
     Description: Give a unique name for "CloudFormationLab" tag value
     Type: String
-    Default: DaenerysTargaryen
+    Default: MerchantProtocolWebVPC
 
 ## =================== RESOURCES =================== #
 Resources:
   # ----------------  Step 1 ----------------
   # a) Create a VPC
-  myVPC:
+  MPVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: !Ref paramVpcCIDR
@@ -48,7 +48,7 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # b) Create a Internet Gateway
-  myInternetGateway:
+  MPInternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
@@ -56,36 +56,36 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # c) Attach the Internet Gateway to the VPC
-  myVPCGatewayAttachment:
+  MPVPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref myVPC
-      InternetGatewayId: !Ref myInternetGateway
+      VpcId: !Ref MPVPC
+      InternetGatewayId: !Ref MPInternetGateway
 
   # ----------------  Step 2 ----------------
   # a) Create a public route table for the VPC (will be public once it is associated with the Internet Gateway)
-  myPublicRouteTable:
+  MPPublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref myVPC
+      VpcId: !Ref MPVPC
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
 
   # b) Associate the public route table with the Internet Gateway
-  myPublicRoute:
+  MPPublicRoute:
     Type: AWS::EC2::Route
-    DependsOn: myVPCGatewayAttachment
+    DependsOn: MPVPCGatewayAttachment
     Properties:
-      RouteTableId: !Ref myPublicRouteTable
+      RouteTableId: !Ref MPPublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref myInternetGateway
+      GatewayId: !Ref MPInternetGateway
 
   # c) Create a public subnet in AZ 1 (will be public once it is associated with public route table)
-  myPublicSubnet1:
+  MPPublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref myVPC
+      VpcId: !Ref MPVPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ] # AZ 1
       CidrBlock: !Ref paramPublicSubnet1CIDR
       MapPublicIpOnLaunch: true # allow instances launched in this subnet receive a public IPv4 address
@@ -94,10 +94,10 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # Create a public subnet in AZ 2 (will be public once it is associated with public route table)
-  myPublicSubnet2:
+  MPPublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref myVPC
+      VpcId: !Ref MPVPC
       AvailabilityZone: !Select [ 1, !GetAZs  '' ] # AZ 2
       CidrBlock: !Ref paramPublicSubnet2CIDR
       MapPublicIpOnLaunch: true # allow instances launched in this subnet receive a public IPv4 address
@@ -106,24 +106,24 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # d) Associate the public route table with the public subnet in AZ 1
-  myPublicSubnet1RouteTableAssociation:
+  MPPublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref myPublicRouteTable
-      SubnetId: !Ref myPublicSubnet1
+      RouteTableId: !Ref MPPublicRouteTable
+      SubnetId: !Ref MPPublicSubnet1
   
   # Associate the public route table with the public subnet in AZ 2
-  myPublicSubnet2RouteTableAssociation:
+  MPPublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref myPublicRouteTable
-      SubnetId: !Ref myPublicSubnet2
+      RouteTableId: !Ref MPPublicRouteTable
+      SubnetId: !Ref MPPublicSubnet2
 
   # ----------------  Step 3 ----------------
   # a) Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 1
-  myEIPforNatGateway1:
+  MPEIPforNatGateway1:
     Type: AWS::EC2::EIP
-    DependsOn: myVPCGatewayAttachment
+    DependsOn: MPVPCGatewayAttachment
     Properties:
       Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
       Tags:
@@ -131,9 +131,9 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 2
-  myEIPforNatGateway2:
+  MPEIPforNatGateway2:
     Type: AWS::EC2::EIP
-    DependsOn: myVPCGatewayAttachment
+    DependsOn: MPVPCGatewayAttachment
     Properties:
       Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
       Tags:
@@ -141,66 +141,66 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # b) Create a NAT Gateway in the public subnet for AZ 1
-  myNatGateway1:
+  MPNatGateway1:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt myEIPforNatGateway1.AllocationId
-      SubnetId: !Ref myPublicSubnet1
+      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
+      SubnetId: !Ref MPPublicSubnet1
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
 
    # Create a NAT Gateway in the public subnet for AZ 2
-  myNatGateway2:
+  MPNatGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt myEIPforNatGateway2.AllocationId
-      SubnetId: !Ref myPublicSubnet2
+      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
+      SubnetId: !Ref MPPublicSubnet2
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
 
   # c) Create a private route table for AZ 1
-  myPrivateRouteTable1:
+  MPPrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref myVPC
+      VpcId: !Ref MPVPC
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
 
   # Create a private route table for AZ 2
-  myPrivateRouteTable2:
+  MPPrivateRouteTable2:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref myVPC
+      VpcId: !Ref MPVPC
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
 
   # d) Associate the private route table with the Nat Gateway in AZ 1
-  myPrivateRouteForAz1:
+  MPPrivateRouteForAz1:
     Type: AWS::EC2::Route
-    DependsOn: myVPCGatewayAttachment
+    DependsOn: MPVPCGatewayAttachment
     Properties:
-      RouteTableId: !Ref myPrivateRouteTable1
+      RouteTableId: !Ref MPPrivateRouteTable1
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref myNatGateway1 
+      NatGatewayId: !Ref MPNatGateway1 
 
   #  Associate the private route table with the Nat Gateway in AZ 2
-  myPrivateRouteForAz2:
+  MPPrivateRouteForAz2:
     Type: AWS::EC2::Route
-    DependsOn: myVPCGatewayAttachment
+    DependsOn: MPVPCGatewayAttachment
     Properties:
-      RouteTableId: !Ref myPrivateRouteTable2
+      RouteTableId: !Ref MPPrivateRouteTable2
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref myNatGateway2
+      NatGatewayId: !Ref MPNatGateway2
 
   # e) Create a private subnet in AZ 1
-  myPrivateSubnet1:
+  MPPrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref myVPC
+      VpcId: !Ref MPVPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ] # AZ 1
       CidrBlock: !Ref paramPrivateSubnet1CIDR
       MapPublicIpOnLaunch: false # private subnet doesn't need public IP
@@ -209,10 +209,10 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # Create a private subnet in AZ 2
-  myPrivateSubnet2:
+  MPPrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref myVPC
+      VpcId: !Ref MPVPC
       AvailabilityZone: !Select [ 1, !GetAZs  '' ] # AZ 2
       CidrBlock: !Ref paramPrivateSubnet2CIDR
       MapPublicIpOnLaunch: false # private subnet doesn't need public IP
@@ -221,30 +221,30 @@ Resources:
         Value:  !Ref paramUniqueName
 
   # f) Associate the private route table with the private subnet in AZ 1
-  myPrivateSubnet1RouteTableAssociation:
+  MPPrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref myPrivateRouteTable1
-      SubnetId: !Ref myPrivateSubnet1
+      RouteTableId: !Ref MPPrivateRouteTable1
+      SubnetId: !Ref MPPrivateSubnet1
   
   #  Associate the private route table with the private subnet in AZ 2
-  myPrivateSubnet2RouteTableAssociation:
+  MPPrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref myPrivateRouteTable2
-      SubnetId: !Ref myPrivateSubnet2
+      RouteTableId: !Ref MPPrivateRouteTable2
+      SubnetId: !Ref MPPrivateSubnet2
 
   RDSPublic:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Public Access To RDS Servers
-      VpcId: Ref: myVPC
+      VpcId: Ref: MPVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
           CidrIp: 0.0.0.0/0
-          Description: Public to MySQL
+          Description: Public to MPSQL
         - IpProtocol: tcp
           FromPort: 5439
           ToPort: 5439
@@ -264,7 +264,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Public SSH Access To Bastion Server
-      VpcId: Ref: myVPC
+      VpcId: Ref: MPVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 2222
@@ -281,7 +281,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Public Access To ElasticLoadBalancers
-      VpcId: Ref: myVPC
+      VpcId: Ref: MPVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -307,10 +307,10 @@ Resources:
 Outputs:
   outputVPC:
     Description: A reference to the created VPC
-    Value: !Ref myVPC
+    Value: !Ref MPVPC
   outputPublicSubnets:
     Description: A list of the public subnets
-    Value: !Join [ ",", [ !Ref myPublicSubnet1, !Ref myPublicSubnet2 ]]
+    Value: !Join [ ",", [ !Ref MPPublicSubnet1, !Ref MPPublicSubnet2 ]]
   outputPrivateSubnets:
     Description: A list of the private subnets
-    Value: !Join [ ",", [ !Ref myPrivateSubnet1, !Ref myPrivateSubnet2 ]]
+    Value: !Join [ ",", [ !Ref MPPrivateSubnet1, !Ref MPPrivateSubnet2 ]]
