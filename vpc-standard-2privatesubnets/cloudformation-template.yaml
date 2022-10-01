@@ -565,12 +565,12 @@ Resources:
       MinSize: "1"
       DesiredCapacity: "1"
       MaxSize: "1"
-      LoadBalancerNames: [!Ref 'WebAppELB']
       Tags:
         -
           Key: Name
           Value: !Join ["", [!Ref "AWS::StackName", "WebApp"]]
           PropagateAtLaunch: true
+#      LoadBalancerNames: [!Ref 'WebAppELB']
 
   WebAppLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
