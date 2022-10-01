@@ -534,7 +534,7 @@ Resources:
       InstanceType: !Ref BastionInstanceType
       KeyName: !Ref KeyPair
       SecurityGroups:
-        - !Ref EC2PrivateAPPServers
+        - !Ref EC2PublicBastion
         
         
 ## =================== Web App =================== #
@@ -581,7 +581,7 @@ Resources:
       InstanceType: !Ref WebAppInstanceType
       KeyName: !Ref KeyPair
       SecurityGroups:
-        - !Ref EC2PublicBastion
+        - !Ref EC2PrivateAPPServers
       
 ## =================== OUTPUTS =================== #
 Outputs:
