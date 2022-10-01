@@ -257,7 +257,7 @@ Resources:
           FromPort: 3306
           ToPort: 3306
           CidrIp: 0.0.0.0/0
-          Description: Public to MPSQL
+          Description: Public to MySQL
         - IpProtocol: tcp
           FromPort: 5439
           ToPort: 5439
@@ -271,6 +271,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 5439
           ToPort: 5439
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: all
+          FromPort: all
+          ToPort: all
           CidrIp: 0.0.0.0/0
 
   EC2PublicBastion:
@@ -291,6 +295,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 2222
           ToPort: 2222
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: all
+          FromPort: all
+          ToPort: all
           CidrIp: 0.0.0.0/0
           
   ELBPublic:
@@ -321,11 +329,15 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
+        - IpProtocol: all
+          FromPort: all
+          ToPort: all
+          CidrIp: 0.0.0.0/0
           
   EC2PrivateAPPServers:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Public SSH Access To Bastion Server
+      GroupDescription: Public Web Access to App Servers thru ELB
       VpcId: !Ref MPVPC
       Tags:
         - Key: Name
@@ -349,6 +361,35 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: all
+          FromPort: all
+          ToPort: all
+          CidrIp: 0.0.0.0/0
+          
+  RDSPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private Access to RDS Servers
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: RDSPrivate
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: Private to MySQL
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: Private to Redshift
+      SecurityGroupEgress:
+        - IpProtocol: all
+          FromPort: all
+          ToPort: all
           CidrIp: 0.0.0.0/0
           
 ## =================== OUTPUTS =================== #
