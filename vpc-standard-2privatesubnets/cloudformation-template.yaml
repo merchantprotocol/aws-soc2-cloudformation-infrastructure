@@ -46,6 +46,8 @@ Resources:
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPWebVPC
 
   # b) Create a Internet Gateway
   MPInternetGateway:
@@ -92,6 +94,8 @@ Resources:
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPublicSubnet1
 
   # Create a public subnet in AZ 2 (will be public once it is associated with public route table)
   MPPublicSubnet2:
@@ -104,6 +108,8 @@ Resources:
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPublicSubnet2
 
   # d) Associate the public route table with the public subnet in AZ 1
   MPPublicSubnet1RouteTableAssociation:
@@ -207,6 +213,8 @@ Resources:
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPrivateSubnet1
 
   # Create a private subnet in AZ 2
   MPPrivateSubnet2:
@@ -219,6 +227,8 @@ Resources:
       Tags:
       - Key: MasteringCF
         Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPrivateSubnet2
 
   # f) Associate the private route table with the private subnet in AZ 1
   MPPrivateSubnet1RouteTableAssociation:
@@ -239,6 +249,9 @@ Resources:
     Properties:
       GroupDescription: Public Access To RDS Servers
       VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: RDSPublic
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3306
@@ -265,6 +278,9 @@ Resources:
     Properties:
       GroupDescription: Public SSH Access To Bastion Server
       VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EC2PublicBastion
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 2222
@@ -282,6 +298,9 @@ Resources:
     Properties:
       GroupDescription: Public Access To ElasticLoadBalancers
       VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: ELBPublic
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -292,6 +311,35 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
+          Description: Public to Secure WebApp
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          
+  EC2PrivateAPPServers:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public SSH Access To Bastion Server
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EC2PrivateAPPServers
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ELBPublic
+          Description: Public to Unsecure WebApp
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref ELBPublic
           Description: Public to Secure WebApp
       SecurityGroupEgress:
         - IpProtocol: tcp
