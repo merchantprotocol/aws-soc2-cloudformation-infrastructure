@@ -560,7 +560,7 @@ Resources:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
       LaunchConfigurationName: !Join ["", [!Ref "AWS::StackName", "WebAppLaunchConfiguration"]]
-      AssociatePublicIpAddress: true
+      AssociatePublicIpAddress: false
       ImageId: !Ref LatestAMI
       InstanceType: !Ref WebAppInstanceType
       KeyName: !Ref KeyPair
