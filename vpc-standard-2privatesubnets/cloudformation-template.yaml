@@ -545,9 +545,7 @@ Resources:
     Properties:
       SecurityGroups:
         - !Ref ELBPublic
-      AvailabilityZones:
-        - !Ref MPPublicSubnet1
-        - !Ref MPPublicSubnet2
+      AvailabilityZones: [!Ref MPPublicSubnet1, !Ref MPPublicSubnet2]
       CrossZone: 'true'
       Listeners:
       - LoadBalancerPort: '80'
