@@ -268,7 +268,8 @@ Resources:
   MPNatGateway1:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
+#      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
+      ConnectivityType: private
       SubnetId: !Ref MPPublicSubnet1
       Tags:
       - Key: MasteringCF
@@ -278,7 +279,8 @@ Resources:
   MPNatGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
+#      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
+      ConnectivityType: private
       SubnetId: !Ref MPPublicSubnet2
       Tags:
       - Key: MasteringCF
