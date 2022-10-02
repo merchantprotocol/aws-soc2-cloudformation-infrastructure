@@ -545,7 +545,7 @@ Resources:
     Properties:
       SecurityGroups:
         - !Ref ELBPublic
-      AvailabilityZones: !GetAZs
+#      AvailabilityZones: !GetAZs
       Subnets:
         - !Ref MPPublicSubnet1
         - !Ref MPPublicSubnet2
