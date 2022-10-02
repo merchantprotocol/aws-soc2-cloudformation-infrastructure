@@ -243,32 +243,10 @@ Resources:
       RouteTableId: !Ref MPPublicRouteTable
       SubnetId: !Ref MPPublicSubnet2
 
-  # ----------------  Step 3 ----------------
-  # a) Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 1
-  MPEIPforNatGateway1:
-    Type: AWS::EC2::EIP
-    DependsOn: MPVPCGatewayAttachment
-    Properties:
-      Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
-      Tags:
-      - Key: MasteringCF
-        Value:  !Ref paramUniqueName
-
-  # Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 2
-  MPEIPforNatGateway2:
-    Type: AWS::EC2::EIP
-    DependsOn: MPVPCGatewayAttachment
-    Properties:
-      Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
-      Tags:
-      - Key: MasteringCF
-        Value:  !Ref paramUniqueName
-
   # b) Create a NAT Gateway in the public subnet for AZ 1
   MPNatGateway1:
     Type: AWS::EC2::NatGateway
     Properties:
-#      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
       ConnectivityType: private
       SubnetId: !Ref MPPublicSubnet1
       Tags:
@@ -279,7 +257,6 @@ Resources:
   MPNatGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
-#      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
       ConnectivityType: private
       SubnetId: !Ref MPPublicSubnet2
       Tags:
