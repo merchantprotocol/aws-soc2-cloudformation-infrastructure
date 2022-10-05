@@ -66,8 +66,8 @@ Parameters:
   BastionSshPort:
     Description: What port number would you like to use to connect to your Bastion Host over SSH?
     Type: Number
-    Default: 2222
-    MinValue: 2222
+    Default: 22
+    MinValue: 22
     MaxValue: 65535
 
   WebAppInstanceType:
