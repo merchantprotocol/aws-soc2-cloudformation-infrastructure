@@ -448,6 +448,11 @@ Resources:
           ToPort: 443
           SourceSecurityGroupId: !Ref ELBPublic
           Description: ELB to Secure WebApp
+        - IpProtocol: tcp
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
+          SourceSecurityGroupId: !Ref EC2PublicBastion
+          Description: Private to Bastion Host
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
