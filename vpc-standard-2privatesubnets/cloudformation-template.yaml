@@ -247,7 +247,7 @@ Resources:
   MPNatGateway1:
     Type: AWS::EC2::NatGateway
     Properties:
-      ConnectivityType: private
+      ConnectivityType: public
       SubnetId: !Ref MPPublicSubnet1
       Tags:
       - Key: MasteringCF
@@ -257,7 +257,7 @@ Resources:
   MPNatGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
-      ConnectivityType: private
+      ConnectivityType: public
       SubnetId: !Ref MPPublicSubnet2
       Tags:
       - Key: MasteringCF
@@ -341,6 +341,7 @@ Resources:
       RouteTableId: !Ref MPPrivateRouteTable2
       SubnetId: !Ref MPPrivateSubnet2
 
+## =================== SECURITY GROUPS =================== #
   RDSPublic:
     Type: AWS::EC2::SecurityGroup
     Properties:
