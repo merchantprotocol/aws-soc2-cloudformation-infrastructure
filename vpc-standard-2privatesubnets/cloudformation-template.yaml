@@ -247,7 +247,7 @@ Resources:
   # a) Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 1
   MPEIPforNatGateway1:
     Type: AWS::EC2::EIP
-    DependsOn: myVPCGatewayAttachment
+    DependsOn: MPVPCGatewayAttachment
     Properties:
       Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
       Tags:
@@ -257,7 +257,7 @@ Resources:
   # Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 2
   MPEIPforNatGateway2:
     Type: AWS::EC2::EIP
-    DependsOn: myVPCGatewayAttachment
+    DependsOn: MPVPCGatewayAttachment
     Properties:
       Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
       Tags:
