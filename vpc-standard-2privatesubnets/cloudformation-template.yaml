@@ -689,7 +689,7 @@ Resources:
       BackupRetentionPeriod: 7
       DBSubnetGroupName: !Ref AuroraDBSubnetGroup
       VpcSecurityGroupIds: 
-        - [!Ref RDSPrivate]
+        - !Ref RDSPrivate
       Engine: aurora-mysql
       ServerlessV2ScalingConfiguration:
         MinCapacity: 0.5
