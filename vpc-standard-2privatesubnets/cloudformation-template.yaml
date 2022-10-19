@@ -36,7 +36,7 @@ Parameters:
     MaxValue: 65535
     
   DBName:
-    Default: 'AuroraMySQLDB'
+    Default: 'mp_saas'
     Description: "Name of the Amazon Aurora database."
     MaxLength: "63"
     MinLength: "5"
