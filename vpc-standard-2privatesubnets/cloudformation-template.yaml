@@ -90,7 +90,7 @@ Parameters:
       - db.t3.small
       - db.serverless
     ConstraintDescription: "Must select a valid database instance type."
-    Default: db.t3.small
+    Default: db.serverless
     Description: "Name of the compute and memory-capacity class of the database instance. Not applicable for Aurora Serverless. Supported instance type for Aurora Multi-Master is db.r4.[2/4/8/16]xlarge only. db.t3 instance class doesn't support RDS Performance Insights."
     Type: String
     
@@ -774,7 +774,7 @@ Resources:
     Properties:
 #      AutoMinorVersionUpgrade: true
       DBClusterIdentifier: !Ref AuroraServerlessV2Cluster
-      DBInstanceClass: db.serverless
+      DBInstanceClass: !Ref DBInstanceClass
       Engine: aurora-mysql
       PubliclyAccessible: false
       CopyTagsToSnapshot: true
