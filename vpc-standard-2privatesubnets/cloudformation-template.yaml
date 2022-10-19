@@ -87,7 +87,8 @@ Parameters:
       - db.r4.4xlarge
       - db.r4.2xlarge
       - db.t3.medium
-      - db.t3.small                
+      - db.t3.small
+      - db.serverless
     ConstraintDescription: "Must select a valid database instance type."
     Default: db.t3.small
     Description: "Name of the compute and memory-capacity class of the database instance. Not applicable for Aurora Serverless. Supported instance type for Aurora Multi-Master is db.r4.[2/4/8/16]xlarge only. db.t3 instance class doesn't support RDS Performance Insights."
