@@ -731,7 +731,7 @@ Resources:
       Port: !Ref DBPort
       BackupRetentionPeriod: 7
       DBSubnetGroupName: !Ref AuroraDBSubnetGroup
-      EngineMode: provision
+      EngineMode: serverless
       VpcSecurityGroupIds: 
         - !Ref RDSPrivate
       Engine: aurora-mysql
