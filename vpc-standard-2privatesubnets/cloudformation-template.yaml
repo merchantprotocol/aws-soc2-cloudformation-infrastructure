@@ -625,6 +625,25 @@ Resources:
           IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
           
+  EFSPrivate:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Private Access to Elastic File Storage
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EFSPrivate
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: Private Web App to Elastic File Storage
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          
           
 ## =================== BASTION =================== #
   BastionASG:
@@ -763,7 +782,89 @@ Resources:
         -
           Key: Name
           Value: !Sub AuroraDB-${AWS::StackName}
-          
+
+  FileSystemResource:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      BackupPolicy:
+        Status: ENABLED
+      PerformanceMode: maxIO
+      Encrypted: true
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+        - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}"WebAppSharedStorage"
+      FileSystemPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "elasticfilesystem:ClientMount"
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+      KmsKeyId: !GetAtt 
+        - FileSystemKey
+        - Arn
+
+  FileSystemKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: "WebAppSharedStorageKey-1"
+        Statement:
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action:
+              - 'kms:*'
+            Resource: 
+              - '*'
+
+  MountTargetResource1:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref MPPrivateSubnet1
+      SecurityGroups:
+      - !Ref EFSPrivate
+
+  MountTargetResource2:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref MPPrivateSubnet2
+      SecurityGroups:
+      - !Ref EFSPrivate
+
+  AccessPointResource:
+    Type: 'AWS::EFS::AccessPoint'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      PosixUser:
+        Uid: "13234"
+        Gid: "1322"
+        SecondaryGids:
+          - "1344"
+          - "1452"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1000" # 708798
+          OwnerUid: "1000" # 7987987
+          Permissions: "0755"
+        Path: "/home/ec2-user/EFS_Mount_SharedStorage"
+
 ## =================== OUTPUTS =================== #
 Outputs:
   outputVPC:
