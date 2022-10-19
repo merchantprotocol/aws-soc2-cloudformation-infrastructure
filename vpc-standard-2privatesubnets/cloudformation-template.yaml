@@ -685,7 +685,6 @@ Resources:
       MasterUserPassword: !Ref DBMasterUserPassword
       DatabaseName: !Ref DBName
       Port: !Ref DBPort
-      AutoMinorVersionUpgrade: true
       BackupRetentionPeriod: 7
       DBSubnetGroupName: !Ref AuroraDBSubnetGroup
       VpcSecurityGroupIds: 
