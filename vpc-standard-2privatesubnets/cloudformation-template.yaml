@@ -783,6 +783,7 @@ Resources:
           Key: Name
           Value: !Sub AuroraDB-${AWS::StackName}
 
+## =================== EFS STORAGE MOUNT =================== #
   FileSystemResource:
     Type: 'AWS::EFS::FileSystem'
     Properties:
