@@ -71,7 +71,28 @@ Parameters:
       - '64'
       - '128'
       - '256'
-      
+
+  DBInstanceClass:
+    AllowedValues:
+      - db.r5.24xlarge
+      - db.r5.16xlarge
+      - db.r5.12xlarge
+      - db.r5.8xlarge
+      - db.r5.4xlarge
+      - db.r5.2xlarge
+      - db.r5.xlarge
+      - db.r5.large
+      - db.r4.16xlarge
+      - db.r4.8xlarge
+      - db.r4.4xlarge
+      - db.r4.2xlarge
+      - db.t3.medium
+      - db.t3.small                
+    ConstraintDescription: "Must select a valid database instance type."
+    Default: db.t3.small
+    Description: "Name of the compute and memory-capacity class of the database instance. Not applicable for Aurora Serverless. Supported instance type for Aurora Multi-Master is db.r4.[2/4/8/16]xlarge only. db.t3 instance class doesn't support RDS Performance Insights."
+    Type: String
+    
   paramVpcCIDR:
     Description: Enter the IP range (CIDR notation) for VPC
     Type: String
@@ -186,6 +207,7 @@ Metadata:
           - DBPort
           - ServerlessMinCapacityUnit
           - ServerlessMaxCapacityUnit
+          - DBInstanceClass
       -
         Label:
           default: "VPC Network Parameters"
@@ -210,6 +232,8 @@ Metadata:
         default: Database port
       DBName:
         default: Database name
+      DBInstanceClass:
+        default: Database instance class
       ServerlessMinCapacityUnit:
         default: Minimum Aurora capacity unit
       ServerlessMaxCapacityUnit:
@@ -707,6 +731,7 @@ Resources:
       Port: !Ref DBPort
       BackupRetentionPeriod: 7
       DBSubnetGroupName: !Ref AuroraDBSubnetGroup
+      EngineMode: provision
       VpcSecurityGroupIds: 
         - !Ref RDSPrivate
       Engine: aurora-mysql
@@ -717,8 +742,27 @@ Resources:
       Tags:
         -
           Key: Name
+          Value: !Sub AuroraDBCluster-${AWS::StackName}
+
+  AuroraDBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F80
+            reason: "Quick Start assets must be able to be deleted"
+    Properties:
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref AuroraServerlessV2Cluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      CopyTagsToSnapshot: true
+      Tags:
+        -
+          Key: Name
           Value: !Sub AuroraDB-${AWS::StackName}
-      
+          
 ## =================== OUTPUTS =================== #
 Outputs:
   outputVPC:
