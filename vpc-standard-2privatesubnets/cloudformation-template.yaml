@@ -8,6 +8,48 @@ Description: >-
 
 ## =================== PARAMETERS =================== #
 Parameters:
+
+  DBMasterUserPassword:
+    AllowedPattern: ^(?=^.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*[@/"']).*$
+    ConstraintDescription: "Min 8 chars. Must include 1 uppercase, 1 lowercase, 1 number, 1 (non / @ \" ') symbol"
+    Description: "Administrator password for the database account. Minimum 8 characters. Must include 1 uppercase, 1 lowercase, 1 number, 1 symbol (not / @ \" ')."
+    MaxLength: "64"
+    MinLength: "8"
+    NoEcho: "True"
+    Type: String
+    
+  DBMasterUsername:
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: "Must begin with a letter and contain only alphanumeric characters."
+    Default: admin
+    Description: "Administrator user name for the database account."
+    MaxLength: "16"
+    MinLength: "1"
+    Type: String
+    
+  DBPort:
+    Default: 3306
+    Description: "Port on which the DB instance listens for connections. Aurora Serverless supports port 3306 only."
+    Type: Number
+    ConstraintDescription: 'Must be in the range [1150-65535].'
+    MinValue: 1150
+    MaxValue: 65535
+    
+  DBName:
+    Default: 'AuroraMySQLDB'
+    Description: "Name of the Amazon Aurora database."
+    MaxLength: "63"
+    MinLength: "5"
+    Type: String
+
+  DBAutoMinorVersionUpgrade:
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+    Description: To enable automatic minor version upgrades, choose "true."
+    Type: String
+    
   paramVpcCIDR:
     Description: Enter the IP range (CIDR notation) for VPC
     Type: String
@@ -106,6 +148,28 @@ Metadata:
     ParameterGroups:
       -
         Label:
+          default: "Bastion Host Parameters"
+        Parameters:
+          - KeyPair
+          - LatestAMI
+          - BastionInstanceType
+          - BastionSshPort
+      - 
+        Label:
+          default: Database Configuration
+        Parameters:
+          - DBName
+          - DBMasterUsername
+          - DBMasterUserPassword
+          - DBPort
+          - DBAutoMinorVersionUpgrade
+         
+          - DBAllocatedStorageEncrypted
+          - DBCWLogExports
+          - DBBackTrack
+          - NotificationList
+      -
+        Label:
           default: "VPC Network Parameters"
         Parameters:
           - paramUniqueName
@@ -116,18 +180,20 @@ Metadata:
           - paramPrivateSubnet2CIDR
       -
         Label:
-          default: "Bastion Host Parameters"
-        Parameters:
-          - KeyPair
-          - LatestAMI
-          - BastionInstanceType
-          - BastionSshPort
-      -
-        Label:
           default: "Web App Host Parameters"
         Parameters:
           - WebAppInstanceType
     ParameterLabels:
+      DBMasterUsername:
+        default: Database administrator user name
+      DBMasterUserPassword:
+        default: Database administrator password
+      DBPort:
+        default: Database port
+      DBName:
+        default: Database name
+      DBAutoMinorVersionUpgrade:
+        default: Database automatic minor version upgrades
       paramUniqueName:
         default: "CloudFormation Name"
       paramVpcCIDR:
@@ -595,6 +661,57 @@ Resources:
       KeyName: !Ref KeyPair
       SecurityGroups:
         - !Ref EC2PrivateAPPServers
+        
+## =================== RDS SERVERLESS 2.0 CLUSTER =================== #
+  AuroraDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "Subnets available for the Amazon Aurora database instance"
+      SubnetIds:
+        - !Ref MPPrivateSubnet1
+        - !Ref MPPrivateSubnet2
+    
+  AuroraServerlessV2Cluster:
+    Type: 'AWS::RDS::DBCluster'
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - ERDSStorageEncryptionEnabled # Storage encryption is optional based on a parameter
+            - W3011 # Quick Starts need to be able to delete all assets upon stack deletion
+    DeletionPolicy: Delete
+    Properties:
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterUserPassword
+      DatabaseName: !Ref DBName
+      Port: !Ref DBPort
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 7
+      DBSubnetGroupName: !Ref AuroraDBSubnetGroup
+      VpcSecurityGroupIds: 
+        - [!Ref RDSPrivate]
+      Engine: aurora-mysql
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 0.5
+        MaxCapacity: 2
+
+  AuroraDB1:
+    Type: "AWS::RDS::DBInstance"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F80
+            reason: "Quick Start assets must be able to be deleted"
+    Properties:
+      AutoMinorVersionUpgrade: !Ref DBAutoMinorVersionUpgrade
+      DBClusterIdentifier: !Ref AuroraServerlessV2Cluster
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      CopyTagsToSnapshot: true
+      Tags:
+        -
+          Key: Name
+          Value: !Sub AuroraDB-${AWS::StackName}
       
 ## =================== OUTPUTS =================== #
 Outputs:
@@ -607,3 +724,23 @@ Outputs:
   outputPrivateSubnets:
     Description: A list of the private subnets
     Value: !Join [ ",", [ !Ref MPPrivateSubnet1, !Ref MPPrivateSubnet2 ]]
+  AuroraMasterUsername:
+    Description: "Amazon Aurora administrator user name"
+    Value: !Ref DBMasterUsername
+  DBName:
+    Description: "Amazon Aurora database name"
+    Value: !Ref DBName
+  AuroraClusterEndpoint:
+    Description: "Amazon Aurora Cluster/Writer endpoint"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Address}
+  AuroraReaderEndpoint:
+    Condition: IsReaderEndpointAvailable
+    Description: "Amazon Aurora Reader Endpoint"
+    Value:  !Sub ${AuroraServerlessV2Cluster.ReadEndpoint.Address}
+  AuroraClusterPort:
+    Description: "Amazon Aurora Endpoint port"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Port}
+  AuroraClusterFullEndpoint:
+    Description: "Full Amazon Aurora Cluster endpoint with port and database name"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Address}:${AuroraServerlessV2Cluster.Endpoint.Port}/${DBName}
+    
