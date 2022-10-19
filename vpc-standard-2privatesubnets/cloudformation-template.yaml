@@ -752,9 +752,9 @@ Resources:
           - id: F80
             reason: "Quick Start assets must be able to be deleted"
     Properties:
-      AutoMinorVersionUpgrade: true
+#      AutoMinorVersionUpgrade: true
       DBClusterIdentifier: !Ref AuroraServerlessV2Cluster
-      DBInstanceClass: !Ref DBInstanceClass
+      DBInstanceClass: db.serverless
       Engine: aurora-mysql
       PubliclyAccessible: false
       CopyTagsToSnapshot: true
