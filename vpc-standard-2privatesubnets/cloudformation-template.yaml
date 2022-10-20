@@ -796,7 +796,7 @@ Resources:
         - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
       FileSystemTags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}"WebAppSharedStorage"
+          Value: !Sub ${AWS::StackName}WebAppSharedStorage
       FileSystemPolicy:
         Version: "2012-10-17"
         Statement:
