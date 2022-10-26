@@ -828,15 +828,29 @@ Resources:
           - Sid: Allow administration of the key
             Effect: Allow
             Principal:
+              AWS: '*'
+            Action:
+              - "elasticfilesystem:ClientRootAccess"
+              - "elasticfilesystem:ClientWrite"
+              - "elasticfilesystem:ClientMount"
+            Resource: 
+              - !Ref FileSystemResource
+            Condition:
+              Bool:
+                - "elasticfilesystem:AccessedViaMountTarget": "true"
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
               AWS: !Join 
                 - ''
                 - - 'arn:aws:iam::'
                   - !Ref 'AWS::AccountId'
                   - ':root'
             Action:
-              - 'kms:*'
+              - "elasticfilesystem:ClientWrite"
+              - "elasticfilesystem:ClientMount"
             Resource: 
-              - '*'
+              - !Ref FileSystemResource
 
   MountTargetResource1:
     Type: 'AWS::EFS::MountTarget'
