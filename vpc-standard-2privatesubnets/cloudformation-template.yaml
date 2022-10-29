@@ -833,8 +833,6 @@ Resources:
               - "elasticfilesystem:ClientRootAccess"
               - "elasticfilesystem:ClientWrite"
               - "elasticfilesystem:ClientMount"
-            Resource: 
-              - !Ref FileSystemResource
             Condition:
               Bool:
                 - "elasticfilesystem:AccessedViaMountTarget": "true"
@@ -849,8 +847,6 @@ Resources:
             Action:
               - "elasticfilesystem:ClientWrite"
               - "elasticfilesystem:ClientMount"
-            Resource: 
-              - !Ref FileSystemResource
 
   MountTargetResource1:
     Type: 'AWS::EFS::MountTarget'
