@@ -829,6 +829,7 @@ Resources:
             Effect: Allow
             Principal:
               AWS: '*'
+            Resource: '*'
             Action:
               - "elasticfilesystem:ClientRootAccess"
               - "elasticfilesystem:ClientWrite"
@@ -838,6 +839,7 @@ Resources:
                 - "elasticfilesystem:AccessedViaMountTarget": "true"
           - Sid: Allow administration of the key
             Effect: Allow
+            Resource: '*'
             Principal:
               AWS: !Join 
                 - ''
