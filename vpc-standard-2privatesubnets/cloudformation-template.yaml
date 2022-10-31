@@ -816,7 +816,7 @@ Resources:
               - "elasticfilesystem:ClientMount"
             Condition:
               Bool:
-                - "elasticfilesystem:AccessedViaMountTarget": "true"
+                - 'elasticfilesystem:AccessedViaMountTarget': true
           - Sid: Allow Access
             Effect: Allow
             Resource: '*'
