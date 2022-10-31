@@ -805,15 +805,30 @@ Resources:
       FileSystemPolicy:
         Version: "2012-10-17"
         Statement:
-          - Effect: "Allow"
+          - Sid: Allow Mount Target Access
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Resource: '*'
             Action:
+              - "elasticfilesystem:ClientRootAccess"
+              - "elasticfilesystem:ClientWrite"
               - "elasticfilesystem:ClientMount"
+            Condition:
+              Bool:
+                - "elasticfilesystem:AccessedViaMountTarget": "true"
+          - Sid: Allow Access
+            Effect: Allow
+            Resource: '*'
             Principal:
               AWS: !Join 
                 - ''
                 - - 'arn:aws:iam::'
                   - !Ref 'AWS::AccountId'
                   - ':root'
+            Action:
+              - "elasticfilesystem:ClientWrite"
+              - "elasticfilesystem:ClientMount"
       KmsKeyId: !GetAtt 
         - FileSystemKey
         - Arn
@@ -828,27 +843,15 @@ Resources:
           - Sid: Allow administration of the key
             Effect: Allow
             Principal:
-              AWS: '*'
-            Resource: '*'
-            Action:
-              - "elasticfilesystem:ClientRootAccess"
-              - "elasticfilesystem:ClientWrite"
-              - "elasticfilesystem:ClientMount"
-            Condition:
-              Bool:
-                - "elasticfilesystem:AccessedViaMountTarget": "true"
-          - Sid: Allow administration of the key
-            Effect: Allow
-            Resource: '*'
-            Principal:
               AWS: !Join 
                 - ''
                 - - 'arn:aws:iam::'
                   - !Ref 'AWS::AccountId'
                   - ':root'
             Action:
-              - "elasticfilesystem:ClientWrite"
-              - "elasticfilesystem:ClientMount"
+              - 'kms:*'
+            Resource: 
+              - '*'
 
   MountTargetResource1:
     Type: 'AWS::EFS::MountTarget'
