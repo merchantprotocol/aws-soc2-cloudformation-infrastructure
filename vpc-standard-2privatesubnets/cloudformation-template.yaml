@@ -827,6 +827,7 @@ Resources:
                   - !Ref 'AWS::AccountId'
                   - ':root'
             Action:
+              - "elasticfilesystem:ClientRootAccess"
               - "elasticfilesystem:ClientWrite"
               - "elasticfilesystem:ClientMount"
       KmsKeyId: !GetAtt 
