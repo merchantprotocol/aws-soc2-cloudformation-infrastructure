@@ -827,8 +827,6 @@ Resources:
                   - !Ref 'AWS::AccountId'
                   - ':root'
             Action:
-              - "elasticfilesystem:ClientRootAccess"
-              - "elasticfilesystem:ClientWrite"
               - "elasticfilesystem:ClientMount"
       KmsKeyId: !GetAtt 
         - FileSystemKey
@@ -875,17 +873,14 @@ Resources:
     Properties:
       FileSystemId: !Ref FileSystemResource
       PosixUser:
-        Uid: "13234"
-        Gid: "1322"
-        SecondaryGids:
-          - "1344"
-          - "1452"
+        Uid: "1000"
+        Gid: "1000"
       RootDirectory:
         CreationInfo:
           OwnerGid: "1000" # 708798
           OwnerUid: "1000" # 7987987
-          Permissions: "0755"
-        Path: "/home/ec2-user/EFS_Mount_SharedStorage"
+          Permissions: "0777"
+        Path: "/"
 
 ## =================== OUTPUTS =================== #
 Outputs:
