@@ -650,7 +650,9 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "BastionHostASG"]]
-      LaunchConfigurationName: !Ref BastionLaunchConfig
+      LaunchTemplate:
+        LaunchTemplateId: !Ref BastionLaunchTemplate
+        Version: !GetAtt BastionLaunchTemplate.LatestVersionNumber
       VPCZoneIdentifier:
         - !Ref MPPublicSubnet1
         - !Ref MPPublicSubnet2
@@ -663,17 +665,20 @@ Resources:
           Value: !Join ["", [!Ref "AWS::StackName", "BastionHost"]]
           PropagateAtLaunch: true
 
-  BastionLaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
+  BastionLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchConfigurationName: !Join ["", [!Ref "AWS::StackName", "BastionHostLaunchConfiguration"]]
-      AssociatePublicIpAddress: true
-      ImageId: !Ref LatestAMI
-      InstanceType: !Ref BastionInstanceType
-      KeyName: !Ref KeyPair
-      SecurityGroups:
-        - !Ref EC2PublicBastion
-        
+      LaunchTemplateName: !Join ["", [!Ref "AWS::StackName", "BastionHostLaunchTemplate"]]
+      LaunchTemplateData:
+        ImageId: !Ref LatestAMI
+        InstanceType: !Ref BastionInstanceType
+        KeyName: !Ref KeyPair
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeviceIndex: 0
+            Groups:
+              - !Ref EC2PublicBastion
+
         
 ## =================== Web App =================== #
   WebAppELB:
@@ -701,7 +706,9 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "WebAppASG"]]
-      LaunchConfigurationName: !Ref WebAppLaunchConfig
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebAppLaunchTemplate
+        Version: !GetAtt WebAppLaunchTemplate.LatestVersionNumber
       VPCZoneIdentifier:
         - !Ref MPPrivateSubnet1
         - !Ref MPPrivateSubnet2
@@ -715,22 +722,24 @@ Resources:
           PropagateAtLaunch: true
 #      LoadBalancerNames: [!Ref 'WebAppELB']
 
-  WebAppLaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
+  WebAppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchConfigurationName: !Join ["", [!Ref "AWS::StackName", "WebAppLaunchConfiguration"]]
-      AssociatePublicIpAddress: false
-      ImageId: !Ref LatestAMI
-      InstanceType: !Ref WebAppInstanceType
-      KeyName: !Ref KeyPair
-      SecurityGroups:
-        - !Ref EC2PrivateAPPServers
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash -xe
-          yum update -y 
-          curl -L "https://raw.githubusercontent.com/merchantprotocol/protocol/master/bin/install" | bash
-        
+      LaunchTemplateName: !Join ["", [!Ref "AWS::StackName", "WebAppLaunchTemplate"]]
+      LaunchTemplateData:
+        ImageId: !Ref LatestAMI
+        InstanceType: !Ref WebAppInstanceType
+        KeyName: !Ref KeyPair
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            Groups:
+              - !Ref EC2PrivateAPPServers
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            yum update -y 
+            curl -L "https://raw.githubusercontent.com/merchantprotocol/protocol/master/bin/install" | bash
+            
 ## =================== RDS SERVERLESS 2.0 CLUSTER =================== #
   AuroraDBSubnetGroup:
     Type: "AWS::RDS::DBSubnetGroup"
