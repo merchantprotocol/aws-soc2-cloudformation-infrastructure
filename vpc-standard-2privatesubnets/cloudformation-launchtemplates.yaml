@@ -1,0 +1,914 @@
+## =================== VERSION =================== #
+AWSTemplateFormatVersion: 2010-09-09
+
+## =================== DESCRIPTION =================== #
+Description: >-
+  AWS CloudFormation Standard VPC Configuration for Web Application. 
+  Creates a custom VPC with a pair of public and private subnets spread across two AZs
+
+## =================== PARAMETERS =================== #
+Parameters:
+
+  DBMasterUserPassword:
+    AllowedPattern: ^(?=^.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*[@/"']).*$
+    ConstraintDescription: "Min 8 chars. Must include 1 uppercase, 1 lowercase, 1 number, 1 (non / @ \" ') symbol"
+    Description: "Administrator password for the database account. Minimum 8 characters. Must include 1 uppercase, 1 lowercase, 1 number, 1 symbol (not / @ \" ')."
+    MaxLength: "64"
+    MinLength: "8"
+    NoEcho: "True"
+    Type: String
+    
+  DBMasterUsername:
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: "Must begin with a letter and contain only alphanumeric characters."
+    Default: admin
+    Description: "Administrator user name for the database account."
+    MaxLength: "16"
+    MinLength: "1"
+    Type: String
+    
+  DBPort:
+    Default: 3306
+    Description: "Port on which the DB instance listens for connections. Aurora Serverless supports port 3306 only."
+    Type: Number
+    ConstraintDescription: 'Must be in the range [1150-65535].'
+    MinValue: 1150
+    MaxValue: 65535
+    
+  DBName:
+    Default: 'mp_saas'
+    Description: "Name of the Amazon Aurora database."
+    MaxLength: "63"
+    MinLength: "5"
+    Type: String
+
+  ServerlessMinCapacityUnit:
+    Description: Minimum capacity for an Aurora DB cluster in serverless DB engine mode. The minimum capacity must be less than or equal to the maximum capacity.
+    Type: String
+    Default: '2'
+    AllowedValues:
+      - '1'
+      - '2'
+      - '4'
+      - '8'
+      - '16'
+      - '32'
+      - '64'
+      - '128'
+      - '256'
+      
+  ServerlessMaxCapacityUnit:
+    Description: Maximum capacity for an Aurora DB cluster in serverless DB engine mode. The maximum capacity must be greater than or equal to the minimum capacity.
+    Type: String
+    Default: '64'
+    AllowedValues:
+      - '1'
+      - '2'
+      - '4'
+      - '8'
+      - '16'
+      - '32'
+      - '64'
+      - '128'
+      - '256'
+
+  DBInstanceClass:
+    AllowedValues:
+      - db.r5.24xlarge
+      - db.r5.16xlarge
+      - db.r5.12xlarge
+      - db.r5.8xlarge
+      - db.r5.4xlarge
+      - db.r5.2xlarge
+      - db.r5.xlarge
+      - db.r5.large
+      - db.r4.16xlarge
+      - db.r4.8xlarge
+      - db.r4.4xlarge
+      - db.r4.2xlarge
+      - db.t3.medium
+      - db.t3.small
+      - db.serverless
+    ConstraintDescription: "Must select a valid database instance type."
+    Default: db.serverless
+    Description: "Name of the compute and memory-capacity class of the database instance. Not applicable for Aurora Serverless. Supported instance type for Aurora Multi-Master is db.r4.[2/4/8/16]xlarge only. db.t3 instance class doesn't support RDS Performance Insights."
+    Type: String
+    
+  paramVpcCIDR:
+    Description: Enter the IP range (CIDR notation) for VPC
+    Type: String
+    Default: 10.0.0.0/16
+    
+  paramPublicSubnet1CIDR:
+    Description: Enter the IP range (CIDR notation)  for the public subnet in AZ A
+    Type: String
+    Default: 10.0.0.0/20
+    
+  paramPublicSubnet2CIDR:
+    Description: Enter the IP range (CIDR notation)  for the public subnet in AZ B
+    Type: String
+    Default: 10.0.16.0/20
+    
+  paramPrivateSubnet1CIDR:
+    Description: Enter the IP range (CIDR notation)  for the private subnet in AZ A
+    Type: String
+    Default: 10.0.128.0/20
+    
+  paramPrivateSubnet2CIDR:
+    Description: Enter the IP range (CIDR notation)  for the private subnet in AZ B
+    Type: String
+    Default: 10.0.144.0/20
+    
+  paramUniqueName:
+    Description: Give a unique name for "CloudFormationLab" tag value
+    Type: String
+    Default: MerchantProtocolWebVPC
+    
+  LatestAMI:
+    Description: Static reference to latest Amazon Linux 2 AMI
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    AllowedValues:
+      - '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+      
+  BastionInstanceType:
+    Description: Instance size for the Bastion Host (default - t3.nano)
+    Type: String 
+    AllowedValues: [t2.nano, t2.micro, t2.small, t2.medium, t2.large, t2.xlarge, t2.2xlarge,
+      t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+      m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge,
+      g3.8xlarge,
+      r5.large, r5.xlarge, r5.2xlarge, r5.4xlarge, r3.12xlarge,
+      i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge,
+      d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge]
+    Default: t3.nano
+    
+  KeyPair:
+    Description: Which Key Pair would you like to use for remote access?
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    
+  BastionSshPort:
+    Description: What port number would you like to use to connect to your Bastion Host over SSH?
+    Type: Number
+    Default: 22
+    MinValue: 22
+    MaxValue: 65535
+
+  WebAppInstanceType:
+    Description: Instance size for the WebApp Host (default - t3.nano)
+    Type: String 
+    AllowedValues: [t2.nano, t2.micro, t2.small, t2.medium, t2.large, t2.xlarge, t2.2xlarge,
+      t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+      m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge,
+      g3.8xlarge,
+      r5.large, r5.xlarge, r5.2xlarge, r5.4xlarge, r3.12xlarge,
+      i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge,
+      d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge]
+    Default: t3.nano
+    
+## =================== METADATA =================== #
+Metadata:
+
+  Authors:
+    Description:  Jonathon Byrdziak (jonathon@merchantprotocol.com)
+
+  Purpose:
+    Description: "This template is used to create a stack that leverages private subnets 
+                  accessible by a bastion server for best practices in security on AWS.
+                  The associated security group provides secure access to the bastion host 
+                  based on the provided origin cidr block and SSH port.  SSH access to the 
+                  bastion host is granted using the default ec2-user credentials and the 
+                  keypair supplied via the KeyPair parameter."
+
+  License:
+    Description: 'Copyright 2022 Merchant Protocol
+                  Merchant Protocol Commercial License'
+                  
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Bastion Host Parameters"
+        Parameters:
+          - KeyPair
+          - LatestAMI
+          - BastionInstanceType
+          - BastionSshPort
+      - 
+        Label:
+          default: Database Configuration
+        Parameters:
+          - DBName
+          - DBMasterUsername
+          - DBMasterUserPassword
+          - DBPort
+          - ServerlessMinCapacityUnit
+          - ServerlessMaxCapacityUnit
+          - DBInstanceClass
+      -
+        Label:
+          default: "VPC Network Parameters"
+        Parameters:
+          - paramUniqueName
+          - paramVpcCIDR
+          - paramPublicSubnet1CIDR
+          - paramPublicSubnet2CIDR
+          - paramPrivateSubnet1CIDR
+          - paramPrivateSubnet2CIDR
+      -
+        Label:
+          default: "Web App Host Parameters"
+        Parameters:
+          - WebAppInstanceType
+    ParameterLabels:
+      DBMasterUsername:
+        default: Database administrator user name
+      DBMasterUserPassword:
+        default: Database administrator password
+      DBPort:
+        default: Database port
+      DBName:
+        default: Database name
+      DBInstanceClass:
+        default: Database instance class
+      ServerlessMinCapacityUnit:
+        default: Minimum Aurora capacity unit
+      ServerlessMaxCapacityUnit:
+        default: Maximum Aurora capacity unit
+      paramUniqueName:
+        default: "CloudFormation Name"
+      paramVpcCIDR:
+        default: "VPC CIDR Block"
+      paramPublicSubnet1CIDR:
+        default: "Public 1 Subnet CIDR Block"
+      paramPublicSubnet2CIDR:
+        default: "Public 2 Subnet CIDR Block"
+      paramPrivateSubnet1CIDR:
+        default: "Private 1 Subnet CIDR Block"
+      paramPrivateSubnet2CIDR:
+        default: "Private 2 Subnet CIDR Block"
+      KeyPair:
+        default: "Key Pair"
+      LatestAMI:
+        default: "AMI"
+      BastionInstanceType:
+        default: "Bastion Instance Type"
+      BastionSshPort:
+        default: "SSH Port Number"
+      WebAppInstanceType:
+        default: "Web App Instance Type"
+
+## =================== RESOURCES =================== #
+Resources:
+  # ----------------  Step 1 ----------------
+  # a) Create a VPC
+  MPVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref paramVpcCIDR
+      EnableDnsSupport: true # let instances in the VPC get DNS hostnames
+      EnableDnsHostnames: true # allow DNS resolution
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPWebVPC
+
+  # b) Create a Internet Gateway
+  MPInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+
+  # c) Attach the Internet Gateway to the VPC
+  MPVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MPVPC
+      InternetGatewayId: !Ref MPInternetGateway
+
+  # ----------------  Step 2 ----------------
+  # a) Create a public route table for the VPC (will be public once it is associated with the Internet Gateway)
+  MPPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MPVPC
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+
+  # b) Associate the public route table with the Internet Gateway
+  MPPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref MPPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MPInternetGateway
+
+  # c) Create a public subnet in AZ 1 (will be public once it is associated with public route table)
+  MPPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ] # AZ 1
+      CidrBlock: !Ref paramPublicSubnet1CIDR
+      MapPublicIpOnLaunch: true # allow instances launched in this subnet receive a public IPv4 address
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPublicSubnet1
+
+  # Create a public subnet in AZ 2 (will be public once it is associated with public route table)
+  MPPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ] # AZ 2
+      CidrBlock: !Ref paramPublicSubnet2CIDR
+      MapPublicIpOnLaunch: true # allow instances launched in this subnet receive a public IPv4 address
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPublicSubnet2
+
+  # d) Associate the public route table with the public subnet in AZ 1
+  MPPublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPublicRouteTable
+      SubnetId: !Ref MPPublicSubnet1
+  
+  # Associate the public route table with the public subnet in AZ 2
+  MPPublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPublicRouteTable
+      SubnetId: !Ref MPPublicSubnet2
+
+  # ----------------  Step 3 ----------------
+  # a) Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 1
+  MPEIPforNatGateway1:
+    Type: AWS::EC2::EIP
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+
+  # Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 2
+  MPEIPforNatGateway2:
+    Type: AWS::EC2::EIP
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      Domain: vpc # if the region supports EC2-Classic, the default is "standard", otherwise - "vpc"
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+        
+  # b) Create a NAT Gateway in the public subnet for AZ 1
+  MPNatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: public
+      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
+      SubnetId: !Ref MPPublicSubnet1
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+
+   # Create a NAT Gateway in the public subnet for AZ 2
+  MPNatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: public
+      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
+      SubnetId: !Ref MPPublicSubnet2
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+
+  # c) Create a private route table for AZ 1
+  MPPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MPVPC
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+
+  # Create a private route table for AZ 2
+  MPPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MPVPC
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+
+  # d) Associate the private route table with the Nat Gateway in AZ 1
+  MPPrivateRouteForAz1:
+    Type: AWS::EC2::Route
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref MPNatGateway1 
+
+  #  Associate the private route table with the Nat Gateway in AZ 2
+  MPPrivateRouteForAz2:
+    Type: AWS::EC2::Route
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref MPNatGateway2
+
+  # e) Create a private subnet in AZ 1
+  MPPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ] # AZ 1
+      CidrBlock: !Ref paramPrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false # private subnet doesn't need public IP
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPrivateSubnet1
+
+  # Create a private subnet in AZ 2
+  MPPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ] # AZ 2
+      CidrBlock: !Ref paramPrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false # private subnet doesn't need public IP
+      Tags:
+      - Key: MasteringCF
+        Value:  !Ref paramUniqueName
+      - Key: Name
+        Value: MPPrivateSubnet2
+
+  # f) Associate the private route table with the private subnet in AZ 1
+  MPPrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable1
+      SubnetId: !Ref MPPrivateSubnet1
+  
+  #  Associate the private route table with the private subnet in AZ 2
+  MPPrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable2
+      SubnetId: !Ref MPPrivateSubnet2
+
+## =================== SECURITY GROUPS =================== #
+  RDSPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public Access To RDS Servers
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: RDSPublic
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+          Description: Public to MySQL
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 0.0.0.0/0
+          Description: Public to Redshift
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 0.0.0.0/0
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  EC2PublicBastion:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Join ["", [ !Ref "AWS::StackName", "BastionHostSecurityGroup"]]
+      GroupDescription: Public SSH Access To Bastion Server
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EC2PublicBastion
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
+          CidrIp: 0.0.0.0/0
+          Description: Public to SSH on Bastion
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
+          CidrIp: 0.0.0.0/0
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          
+  ELBPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public Access To ElasticLoadBalancers
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: ELBPublic
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Public to Unsecure WebApp
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Public to Secure WebApp
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          
+  EC2PrivateAPPServers:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public Web Access to App Servers thru ELB
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EC2PrivateAPPServers
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ELBPublic
+          Description: ELB to Unsecure WebApp
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref ELBPublic
+          Description: ELB to Secure WebApp
+        - IpProtocol: tcp
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
+          SourceSecurityGroupId: !Ref EC2PublicBastion
+          Description: Private to Bastion Host
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          
+  RDSPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private Access to RDS Servers
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: RDSPrivate
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: Private to MySQL
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: Private to Redshift
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          
+  EFSPrivate:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Private Access to Elastic File Storage
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EFSPrivate
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: Private Web App to Elastic File Storage
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          
+          
+## =================== BASTION =================== #
+  BastionASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "BastionHostASG"]]
+      LaunchConfigurationName: !Ref BastionLaunchConfig
+      VPCZoneIdentifier:
+        - !Ref MPPublicSubnet1
+        - !Ref MPPublicSubnet2
+      MinSize: "1"
+      DesiredCapacity: "1"
+      MaxSize: "1"
+      Tags:
+        -
+          Key: Name
+          Value: !Join ["", [!Ref "AWS::StackName", "BastionHost"]]
+          PropagateAtLaunch: true
+
+  BastionLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Join ["", [!Ref "AWS::StackName", "BastionHostLaunchConfiguration"]]
+      AssociatePublicIpAddress: true
+      ImageId: !Ref LatestAMI
+      InstanceType: !Ref BastionInstanceType
+      KeyName: !Ref KeyPair
+      SecurityGroups:
+        - !Ref EC2PublicBastion
+        
+        
+## =================== Web App =================== #
+  WebAppELB:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      SecurityGroups:
+        - !Ref ELBPublic
+#      AvailabilityZones: !GetAZs
+      Subnets:
+        - !Ref MPPublicSubnet1
+        - !Ref MPPublicSubnet2
+      CrossZone: 'true'
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '30'
+        Timeout: '5'
+      
+  WebAppASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "WebAppASG"]]
+      LaunchConfigurationName: !Ref WebAppLaunchConfig
+      VPCZoneIdentifier:
+        - !Ref MPPrivateSubnet1
+        - !Ref MPPrivateSubnet2
+      MinSize: "1"
+      DesiredCapacity: "1"
+      MaxSize: "1"
+      Tags:
+        -
+          Key: Name
+          Value: !Join ["", [!Ref "AWS::StackName", "WebApp"]]
+          PropagateAtLaunch: true
+#      LoadBalancerNames: [!Ref 'WebAppELB']
+
+  WebAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Join ["", [!Ref "AWS::StackName", "WebAppLaunchConfiguration"]]
+      AssociatePublicIpAddress: false
+      ImageId: !Ref LatestAMI
+      InstanceType: !Ref WebAppInstanceType
+      KeyName: !Ref KeyPair
+      SecurityGroups:
+        - !Ref EC2PrivateAPPServers
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y 
+          curl -L "https://raw.githubusercontent.com/merchantprotocol/protocol/master/bin/install" | bash
+        
+## =================== RDS SERVERLESS 2.0 CLUSTER =================== #
+  AuroraDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "Subnets available for the Amazon Aurora database instance"
+      SubnetIds:
+        - !Ref MPPrivateSubnet1
+        - !Ref MPPrivateSubnet2
+    
+  AuroraServerlessV2Cluster:
+    Type: 'AWS::RDS::DBCluster'
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - ERDSStorageEncryptionEnabled # Storage encryption is optional based on a parameter
+            - W3011 # Quick Starts need to be able to delete all assets upon stack deletion
+    DeletionPolicy: Delete
+    Properties:
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterUserPassword
+      DatabaseName: !Ref DBName
+      Port: !Ref DBPort
+      BackupRetentionPeriod: 7
+      DBSubnetGroupName: !Ref AuroraDBSubnetGroup
+      VpcSecurityGroupIds: 
+        - !Ref RDSPrivate
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.02.0"
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: !Ref ServerlessMinCapacityUnit
+        MaxCapacity: !Ref ServerlessMaxCapacityUnit
+      CopyTagsToSnapshot: true
+      Tags:
+        -
+          Key: Name
+          Value: !Sub AuroraDBCluster-${AWS::StackName}
+
+  AuroraDBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F80
+            reason: "Quick Start assets must be able to be deleted"
+    Properties:
+#      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref AuroraServerlessV2Cluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      CopyTagsToSnapshot: true
+      Tags:
+        -
+          Key: Name
+          Value: !Sub AuroraDB-${AWS::StackName}
+
+## =================== EFS STORAGE MOUNT =================== #
+  FileSystemResource:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      BackupPolicy:
+        Status: ENABLED
+      PerformanceMode: maxIO
+      Encrypted: true
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+        - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}WebAppSharedStorage
+      FileSystemPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Allow Mount Target Access
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Resource: '*'
+            Action:
+              - "elasticfilesystem:ClientRootAccess"
+              - "elasticfilesystem:ClientWrite"
+              - "elasticfilesystem:ClientMount"
+            Condition:
+              Bool:
+                elasticfilesystem:AccessedViaMountTarget: 'true'
+          - Sid: Allow Access
+            Effect: Allow
+            Resource: '*'
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action:
+              - "elasticfilesystem:ClientMount"
+      KmsKeyId: !GetAtt 
+        - FileSystemKey
+        - Arn
+
+  FileSystemKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: "WebAppSharedStorageKey-1"
+        Statement:
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action:
+              - 'kms:*'
+            Resource: 
+              - '*'
+
+  MountTargetResource1:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref MPPrivateSubnet1
+      SecurityGroups:
+      - !Ref EFSPrivate
+
+  MountTargetResource2:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref MPPrivateSubnet2
+      SecurityGroups:
+      - !Ref EFSPrivate
+
+  AccessPointResource:
+    Type: 'AWS::EFS::AccessPoint'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      PosixUser:
+        Uid: "1000"
+        Gid: "1000"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1000" # 708798
+          OwnerUid: "1000" # 7987987
+          Permissions: "0777"
+        Path: "/"
+
+## =================== OUTPUTS =================== #
+Outputs:
+  outputVPC:
+    Description: A reference to the created VPC
+    Value: !Ref MPVPC
+  outputPublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [ ",", [ !Ref MPPublicSubnet1, !Ref MPPublicSubnet2 ]]
+  outputPrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [ ",", [ !Ref MPPrivateSubnet1, !Ref MPPrivateSubnet2 ]]
+  AuroraMasterUsername:
+    Description: "Amazon Aurora administrator user name"
+    Value: !Ref DBMasterUsername
+  DBName:
+    Description: "Amazon Aurora database name"
+    Value: !Ref DBName
+  AuroraClusterEndpoint:
+    Description: "Amazon Aurora Cluster/Writer endpoint"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Address}
+  AuroraReaderEndpoint:
+    Description: "Amazon Aurora Reader Endpoint"
+    Value:  !Sub ${AuroraServerlessV2Cluster.ReadEndpoint.Address}
+  AuroraClusterPort:
+    Description: "Amazon Aurora Endpoint port"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Port}
+  AuroraClusterFullEndpoint:
+    Description: "Full Amazon Aurora Cluster endpoint with port and database name"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Address}:${AuroraServerlessV2Cluster.Endpoint.Port}/${DBName}
+    
