@@ -1,6 +1,33 @@
-# AWS CloudFormation Templates
+<p align="center">
+  <img src=".github/merchantprotocol.png" alt="Merchant Protocol" width="400">
+</p>
 
-Production-ready, SOC 2 Type II compliant AWS CloudFormation templates for deploying secure web application infrastructure.
+<h1 align="center">AWS CloudFormation Templates</h1>
+
+<p align="center">
+  Production-ready, SOC 2 Type II compliant infrastructure-as-code for AWS.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+  <a href="https://aws.amazon.com/cloudformation/"><img src="https://img.shields.io/badge/AWS-CloudFormation-FF9900?logo=amazonaws&logoColor=white" alt="AWS CloudFormation"></a>
+  <a href="docs/SOC2-CONTROL-MATRIX.md"><img src="https://img.shields.io/badge/SOC_2-Type_II_Ready-blue?logo=shield&logoColor=white" alt="SOC 2 Type II Ready"></a>
+  <a href="https://github.com/merchantprotocol/aws-cloudformation-templates/actions/workflows/validate-templates.yml"><img src="https://github.com/merchantprotocol/aws-cloudformation-templates/actions/workflows/validate-templates.yml/badge.svg" alt="Validate Templates"></a>
+  <br>
+  <a href="https://github.com/merchantprotocol/aws-cloudformation-templates/stargazers"><img src="https://img.shields.io/github/stars/merchantprotocol/aws-cloudformation-templates?style=social" alt="GitHub Stars"></a>
+  <a href="https://github.com/merchantprotocol/aws-cloudformation-templates/issues"><img src="https://img.shields.io/github/issues/merchantprotocol/aws-cloudformation-templates" alt="GitHub Issues"></a>
+  <a href="https://github.com/merchantprotocol/aws-cloudformation-templates/pulls"><img src="https://img.shields.io/github/issues-pr/merchantprotocol/aws-cloudformation-templates" alt="Pull Requests"></a>
+  <a href="https://github.com/merchantprotocol/aws-cloudformation-templates/commits/main"><img src="https://img.shields.io/github/last-commit/merchantprotocol/aws-cloudformation-templates" alt="Last Commit"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> &bull;
+  <a href="#soc-2-compliance">SOC 2 Compliance</a> &bull;
+  <a href="docs/DEPLOYMENT-GUIDE.md">Deployment Guide</a> &bull;
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+---
 
 ## What This Deploys
 
@@ -66,7 +93,11 @@ Deployment takes ~15-20 minutes. See the [Deployment Guide](docs/DEPLOYMENT-GUID
 
 ## SOC 2 Compliance
 
-The SOC 2 template implements controls for all relevant Trust Service Criteria:
+<table>
+<tr>
+<td>
+
+### Trust Service Criteria Coverage
 
 | Category | Controls |
 |----------|---------|
@@ -75,11 +106,28 @@ The SOC 2 template implements controls for all relevant Trust Service Criteria:
 | **CC8 — Change Management** | Infrastructure as Code, drift detection, auto-patching |
 | **A1 — Availability** | Multi-AZ, auto-scaling, 35-day backups, deletion protection |
 
+</td>
+<td>
+
+### Encryption Everywhere
+
+| Layer | At Rest | In Transit |
+|-------|:-------:|:----------:|
+| Web Traffic | — | TLS 1.3 |
+| Database | KMS | TLS enforced |
+| File Storage | KMS | TLS enforced |
+| Audit Logs | KMS + S3 SSE | HTTPS only |
+| Flow Logs | KMS | HTTPS |
+
+</td>
+</tr>
+</table>
+
 ### Compliance Documentation
 
 | Document | Description |
 |----------|-------------|
-| [SOC 2 Control Matrix](docs/SOC2-CONTROL-MATRIX.md) | Maps each TSC to specific template resources — start here for audits |
+| [SOC 2 Control Matrix](docs/SOC2-CONTROL-MATRIX.md) | Maps each TSC to specific template resources — **start here for audits** |
 | [Architecture Overview](docs/ARCHITECTURE-OVERVIEW.md) | Network diagrams, traffic flows, encryption summary |
 | [Evidence Collection Guide](docs/EVIDENCE-COLLECTION-GUIDE.md) | AWS CLI commands to collect every piece of audit evidence |
 | [Access Management Procedure](docs/ACCESS-MANAGEMENT-PROCEDURE.md) | Granting, reviewing, and revoking access |
@@ -123,8 +171,8 @@ The Console groups parameters into numbered sections so you only need to focus o
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting changes.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-Copyright 2022-2026 Merchant Protocol. See [LICENSE](LICENSE) for details.
+Copyright 2022-2026 Merchant Protocol. Released under the [MIT License](LICENSE).
