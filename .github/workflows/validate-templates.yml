@@ -1,0 +1,100 @@
+name: Validate CloudFormation Templates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '!.github/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '!.github/**'
+
+jobs:
+  lint:
+    name: Lint Templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Run cfn-lint
+        run: |
+          cfn-lint vpc-standard-2privatesubnets/*.yaml \
+            --ignore-checks W3011 \
+            --format parseable
+
+  validate-yaml:
+    name: Validate YAML Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Validate YAML
+        run: |
+          python3 -c "
+          import yaml, sys, glob
+
+          # Register CloudFormation intrinsic functions
+          tags = ['Ref', 'Sub', 'GetAtt', 'Join', 'Select', 'GetAZs', 'Equals',
+                  'If', 'Not', 'And', 'Or', 'Condition', 'FindInMap', 'Base64',
+                  'Cidr', 'ImportValue', 'Split', 'Transform']
+          for tag in tags:
+              yaml.SafeLoader.add_constructor(f'!{tag}', lambda l, n: None)
+              yaml.SafeLoader.add_multi_constructor(f'!{tag}', lambda l, s, n: None)
+
+          errors = 0
+          for f in sorted(glob.glob('vpc-standard-2privatesubnets/*.yaml')):
+              try:
+                  yaml.safe_load(open(f))
+                  print(f'PASS: {f}')
+              except yaml.YAMLError as e:
+                  print(f'FAIL: {f} - {e}')
+                  errors += 1
+
+          sys.exit(1 if errors else 0)
+          "
+
+  security-scan:
+    name: Security Scan (cfn-nag)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install cfn_nag
+        run: gem install cfn-nag
+
+      - name: Run cfn_nag
+        run: |
+          cfn_nag_scan \
+            --input-path vpc-standard-2privatesubnets/ \
+            --output-format txt || true
+        # Run as advisory (|| true) — review findings but don't block PRs
+        # Remove || true to enforce once baseline findings are addressed
