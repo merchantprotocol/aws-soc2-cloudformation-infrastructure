@@ -476,37 +476,7 @@ Resources:
       SubnetId: !Ref MPPrivateSubnet2
 
 ## =================== SECURITY GROUPS =================== #
-  RDSPublic:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Public Access To RDS Servers
-      VpcId: !Ref MPVPC
-      Tags:
-        - Key: Name
-          Value: RDSPublic
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: 0.0.0.0/0
-          Description: Public to MySQL
-        - IpProtocol: tcp
-          FromPort: 5439
-          ToPort: 5439
-          CidrIp: 0.0.0.0/0
-          Description: Public to Redshift
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 5439
-          ToPort: 5439
-          CidrIp: 0.0.0.0/0
-        - Description: Allow all outbound traffic
-          IpProtocol: "-1"
-          CidrIp: 0.0.0.0/0
+  # NOTE: RDSPublic security group removed - public database access is a SOC 2 violation (CC6.1)
 
   EC2PublicBastion:
     Type: AWS::EC2::SecurityGroup
@@ -751,19 +721,16 @@ Resources:
     
   AuroraServerlessV2Cluster:
     Type: 'AWS::RDS::DBCluster'
-    Metadata:
-      cfn-lint:
-        config:
-          ignore_checks:
-            - ERDSStorageEncryptionEnabled # Storage encryption is optional based on a parameter
-            - W3011 # Quick Starts need to be able to delete all assets upon stack deletion
-    DeletionPolicy: Delete
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
     Properties:
       MasterUsername: !Ref DBMasterUsername
       MasterUserPassword: !Ref DBMasterUserPassword
       DatabaseName: !Ref DBName
       Port: !Ref DBPort
-      BackupRetentionPeriod: 7
+      BackupRetentionPeriod: 35
+      DeletionProtection: true
+      StorageEncrypted: true
       DBSubnetGroupName: !Ref AuroraDBSubnetGroup
       VpcSecurityGroupIds: 
         - !Ref RDSPrivate
@@ -780,13 +747,8 @@ Resources:
 
   AuroraDBInstance:
     Type: "AWS::RDS::DBInstance"
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: F80
-            reason: "Quick Start assets must be able to be deleted"
     Properties:
-#      AutoMinorVersionUpgrade: true
+      AutoMinorVersionUpgrade: true
       DBClusterIdentifier: !Ref AuroraServerlessV2Cluster
       DBInstanceClass: !Ref DBInstanceClass
       Engine: aurora-mysql
@@ -814,15 +776,23 @@ Resources:
       FileSystemPolicy:
         Version: "2012-10-17"
         Statement:
+          - Sid: EnforceEncryptionInTransit
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Action: '*'
+            Resource: '*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
           - Sid: Allow Mount Target Access
             Effect: Allow
             Principal:
               AWS: '*'
             Resource: '*'
             Action:
-              - "elasticfilesystem:ClientRootAccess"
-              - "elasticfilesystem:ClientWrite"
               - "elasticfilesystem:ClientMount"
+              - "elasticfilesystem:ClientWrite"
             Condition:
               Bool:
                 elasticfilesystem:AccessedViaMountTarget: 'true'
@@ -888,7 +858,7 @@ Resources:
         CreationInfo:
           OwnerGid: "1000" # 708798
           OwnerUid: "1000" # 7987987
-          Permissions: "0777"
+          Permissions: "0750"
         Path: "/"
 
 ## =================== OUTPUTS =================== #
