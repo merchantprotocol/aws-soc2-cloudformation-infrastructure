@@ -751,25 +751,6 @@ Resources:
           IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
 
-  EFSPrivate:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Private Access to Elastic File Storage from App Servers only
-      VpcId: !Ref MPVPC
-      Tags:
-        - Key: Name
-          Value: EFSPrivate
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 2049
-          ToPort: 2049
-          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
-          Description: App Servers to EFS
-      SecurityGroupEgress:
-        - Description: Allow all outbound traffic
-          IpProtocol: "-1"
-          CidrIp: 0.0.0.0/0
-
   ## =================== IAM ROLES (SOC 2: CC6.1, CC6.3) =================== #
   BastionInstanceRole:
     Type: AWS::IAM::Role
@@ -808,15 +789,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
-        - PolicyName: WebAppEFSAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - elasticfilesystem:ClientMount
-                  - elasticfilesystem:ClientWrite
-                Resource: !GetAtt FileSystemResource.Arn
         - PolicyName: WebAppCloudWatchLogs
           PolicyDocument:
             Version: "2012-10-17"
@@ -1086,133 +1058,6 @@ Resources:
         -
           Key: Name
           Value: !Sub AuroraDB-${AWS::StackName}
-
-  ## =================== EFS STORAGE (SOC 2: CC6.1) =================== #
-  FileSystemResource:
-    Type: 'AWS::EFS::FileSystem'
-    Properties:
-      BackupPolicy:
-        Status: ENABLED
-      PerformanceMode: maxIO
-      Encrypted: true
-      LifecyclePolicies:
-        - TransitionToIA: AFTER_30_DAYS
-        - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
-      FileSystemTags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}WebAppSharedStorage
-      FileSystemPolicy:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: EnforceEncryptionInTransit
-            Effect: Deny
-            Principal:
-              AWS: '*'
-            Action: '*'
-            Resource: '*'
-            Condition:
-              Bool:
-                aws:SecureTransport: 'false'
-          - Sid: AllowMountTargetAccess
-            Effect: Allow
-            Principal:
-              AWS: '*'
-            Resource: '*'
-            Action:
-              - "elasticfilesystem:ClientMount"
-              - "elasticfilesystem:ClientWrite"
-            Condition:
-              Bool:
-                elasticfilesystem:AccessedViaMountTarget: 'true'
-          - Sid: AllowAccountAccess
-            Effect: Allow
-            Resource: '*'
-            Principal:
-              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
-            Action:
-              - "elasticfilesystem:ClientMount"
-      KmsKeyId: !GetAtt FileSystemKey.Arn
-
-  FileSystemKey:
-    Type: 'AWS::KMS::Key'
-    Properties:
-      Description: KMS key for EFS encryption at rest
-      EnableKeyRotation: true
-      KeyPolicy:
-        Version: 2012-10-17
-        Id: "WebAppSharedStorageKey-1"
-        Statement:
-          - Sid: Allow administration of the key
-            Effect: Allow
-            Principal:
-              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
-            Action:
-              - kms:Create*
-              - kms:Describe*
-              - kms:Enable*
-              - kms:List*
-              - kms:Put*
-              - kms:Update*
-              - kms:Revoke*
-              - kms:Disable*
-              - kms:Get*
-              - kms:Delete*
-              - kms:TagResource
-              - kms:UntagResource
-              - kms:ScheduleKeyDeletion
-              - kms:CancelKeyDeletion
-              - kms:GenerateDataKey
-              - kms:Decrypt
-              - kms:Encrypt
-            Resource: '*'
-          - Sid: Allow EFS
-            Effect: Allow
-            Principal:
-              Service: elasticfilesystem.amazonaws.com
-            Action:
-              - kms:Encrypt
-              - kms:Decrypt
-              - kms:ReEncrypt*
-              - kms:GenerateDataKey*
-              - kms:CreateGrant
-              - kms:DescribeKey
-            Resource: '*'
-
-  FileSystemKeyAlias:
-    Type: AWS::KMS::Alias
-    Properties:
-      AliasName: !Sub alias/${AWS::StackName}-efs-encryption
-      TargetKeyId: !Ref FileSystemKey
-
-  MountTargetResource1:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystemResource
-      SubnetId: !Ref MPPrivateSubnet1
-      SecurityGroups:
-      - !Ref EFSPrivate
-
-  MountTargetResource2:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystemResource
-      SubnetId: !Ref MPPrivateSubnet2
-      SecurityGroups:
-      - !Ref EFSPrivate
-
-  AccessPointResource:
-    Type: 'AWS::EFS::AccessPoint'
-    Properties:
-      FileSystemId: !Ref FileSystemResource
-      PosixUser:
-        Uid: "1000"
-        Gid: "1000"
-      RootDirectory:
-        CreationInfo:
-          OwnerGid: "1000"
-          OwnerUid: "1000"
-          Permissions: "0750"
-        Path: "/"
 
   ## =================== CLOUDWATCH ALARMS (SOC 2: CC7.2) =================== #
   HighCPUAlarm:
