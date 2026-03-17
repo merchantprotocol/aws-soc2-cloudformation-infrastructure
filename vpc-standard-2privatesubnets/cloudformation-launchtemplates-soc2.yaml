@@ -992,7 +992,7 @@ Resources:
             Groups:
               - !Ref EC2PrivateAPPServers
         UserData:
-          Fn::Base64: !Sub |
+          Fn::Base64: |
             #!/bin/bash -xe
             yum update -y
 
@@ -1082,7 +1082,6 @@ Resources:
       Engine: aurora-mysql
       PubliclyAccessible: false
       AutoMinorVersionUpgrade: true
-      CopyTagsToSnapshot: true
       Tags:
         -
           Key: Name

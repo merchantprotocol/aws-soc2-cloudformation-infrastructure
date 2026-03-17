@@ -726,7 +726,7 @@ Resources:
       SecurityGroups:
         - !Ref EC2PrivateAPPServers
       UserData:
-        Fn::Base64: !Sub |
+        Fn::Base64: |
           #!/bin/bash -xe
           yum update -y
 
@@ -781,7 +781,6 @@ Resources:
       DBInstanceClass: !Ref DBInstanceClass
       Engine: aurora-mysql
       PubliclyAccessible: false
-      CopyTagsToSnapshot: true
       Tags:
         -
           Key: Name
