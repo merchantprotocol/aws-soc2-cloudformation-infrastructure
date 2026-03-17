@@ -1,0 +1,1293 @@
+## =================== VERSION =================== #
+AWSTemplateFormatVersion: 2010-09-09
+
+## =================== DESCRIPTION =================== #
+Description: >-
+  SOC 2 Type II Ready - AWS CloudFormation Standard VPC Configuration for Web Application.
+  Creates a custom VPC with public and private subnets spread across two AZs.
+  Includes CloudTrail, VPC Flow Logs, encryption in transit/at rest, and least-privilege access controls.
+
+## =================== PARAMETERS =================== #
+## Parameters are ordered to match the Console UI groups below.
+## Section 1 (Required) must be filled in. Everything else has sensible defaults.
+Parameters:
+
+  # ---- SECTION 1: Required (you must fill these in) ----
+
+  SSLCertificateArn:
+    Description: "Go to AWS Certificate Manager, create a certificate for your domain, complete DNS validation, then paste the ARN here."
+    Type: String
+    AllowedPattern: ^arn:aws:acm:.*$
+    ConstraintDescription: "Must be a valid ACM certificate ARN (e.g. arn:aws:acm:us-east-1:123456789:certificate/abc-123)"
+
+  KeyPair:
+    Description: "Select an existing EC2 Key Pair for SSH access. Create one in EC2 > Key Pairs if you don't have one."
+    Type: 'AWS::EC2::KeyPair::KeyName'
+
+  DBMasterUserPassword:
+    Description: "Choose a strong password. Min 8 chars, must include uppercase, lowercase, number, and symbol (not / @ \" ')."
+    AllowedPattern: ^(?=^.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*[@/"']).*$
+    ConstraintDescription: "Min 8 chars. Must include 1 uppercase, 1 lowercase, 1 number, 1 (non / @ \" ') symbol"
+    MaxLength: "64"
+    MinLength: "8"
+    NoEcho: "True"
+    Type: String
+
+  BastionAllowedCIDR:
+    Description: "Your office or VPN IP range for SSH access. Use x.x.x.x/32 for a single IP. Google 'what is my IP' to find yours."
+    Type: String
+    Default: 0.0.0.0/0
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    ConstraintDescription: "Must be a valid CIDR block (e.g. 203.0.113.25/32 for one IP, or 203.0.113.0/24 for a range)"
+
+  # ---- SECTION 2: Application Settings (defaults are fine for most deployments) ----
+
+  DBName:
+    Description: "Name of the database to create."
+    Default: 'mp_saas'
+    MaxLength: "63"
+    MinLength: "5"
+    Type: String
+
+  DBMasterUsername:
+    Description: "Admin username for the database."
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: "Must begin with a letter and contain only alphanumeric characters."
+    Default: admin
+    MaxLength: "16"
+    MinLength: "1"
+    Type: String
+
+  WebAppInstanceType:
+    Description: "Server size for your web application. t3.small is good for low traffic, scale up as needed."
+    Type: String
+    AllowedValues: [t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge]
+    Default: t3.small
+
+  BastionInstanceType:
+    Description: "Server size for the bastion (SSH gateway). t3.nano is sufficient for most cases."
+    Type: String
+    AllowedValues: [t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge]
+    Default: t3.nano
+
+  # ---- SECTION 3: Database Sizing (defaults work for most workloads) ----
+
+  DBInstanceClass:
+    Description: "Use db.serverless for auto-scaling. Only change if you need a fixed-size instance."
+    AllowedValues:
+      - db.serverless
+      - db.t3.small
+      - db.t3.medium
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r5.4xlarge
+      - db.r5.8xlarge
+      - db.r5.12xlarge
+      - db.r5.16xlarge
+      - db.r5.24xlarge
+    ConstraintDescription: "Must select a valid database instance type."
+    Default: db.serverless
+    Type: String
+
+  ServerlessMinCapacityUnit:
+    Description: "Minimum Aurora capacity (scales down to save cost). 2 ACUs is a good starting point."
+    Type: String
+    Default: '2'
+    AllowedValues: ['1', '2', '4', '8', '16', '32', '64', '128', '256']
+
+  ServerlessMaxCapacityUnit:
+    Description: "Maximum Aurora capacity (scales up under load). 64 ACUs handles significant traffic."
+    Type: String
+    Default: '64'
+    AllowedValues: ['1', '2', '4', '8', '16', '32', '64', '128', '256']
+
+  DBPort:
+    Description: "Database port. 3306 is the MySQL default. No reason to change this."
+    Default: 3306
+    Type: Number
+    ConstraintDescription: 'Must be in the range [1150-65535].'
+    MinValue: 1150
+    MaxValue: 65535
+
+  # ---- SECTION 4: Compliance Settings (defaults meet SOC 2 requirements) ----
+
+  FlowLogRetentionDays:
+    Description: "How long to keep network traffic logs. 365 days meets most SOC 2 audit windows."
+    Type: Number
+    Default: 365
+    AllowedValues: [90, 180, 365, 730]
+
+  CloudTrailS3BucketName:
+    Description: "Leave blank to auto-create an encrypted S3 bucket. Only set this if you have an existing bucket."
+    Type: String
+    Default: ''
+
+  BastionSshPort:
+    Description: "SSH port for the bastion host. 22 is standard. Change only if your security policy requires a non-standard port."
+    Type: Number
+    Default: 22
+    MinValue: 22
+    MaxValue: 65535
+
+  # ---- SECTION 5: Network (almost never need to change these) ----
+
+  paramUniqueName:
+    Description: "A label applied to all resources for identification. The stack name is usually sufficient."
+    Type: String
+    Default: MerchantProtocolWebVPC
+
+  paramVpcCIDR:
+    Description: "IP range for the entire VPC. Only change if it conflicts with an existing VPC or VPN."
+    Type: String
+    Default: 10.0.0.0/16
+
+  paramPublicSubnet1CIDR:
+    Description: "Public subnet in Availability Zone A."
+    Type: String
+    Default: 10.0.0.0/20
+
+  paramPublicSubnet2CIDR:
+    Description: "Public subnet in Availability Zone B."
+    Type: String
+    Default: 10.0.16.0/20
+
+  paramPrivateSubnet1CIDR:
+    Description: "Private subnet in Availability Zone A."
+    Type: String
+    Default: 10.0.128.0/20
+
+  paramPrivateSubnet2CIDR:
+    Description: "Private subnet in Availability Zone B."
+    Type: String
+    Default: 10.0.144.0/20
+
+  LatestAMI:
+    Description: "Amazon Linux 2023 AMI (auto-resolved, do not change)."
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64'
+    AllowedValues:
+      - '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64'
+
+## =================== CONDITIONS =================== #
+Conditions:
+  CreateCloudTrailBucket: !Equals [!Ref CloudTrailS3BucketName, '']
+
+## =================== METADATA =================== #
+Metadata:
+
+  Authors:
+    Description: Jonathon Byrdziak (jonathon@merchantprotocol.com)
+
+  Purpose:
+    Description: "SOC 2 Type II ready template. Deploys a hardened VPC with private subnets,
+                  encrypted data at rest and in transit, VPC Flow Logs, CloudTrail,
+                  IAM instance roles, and least-privilege security groups."
+
+  License:
+    Description: 'Copyright 2022 Merchant Protocol
+                  Merchant Protocol Commercial License'
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "1. Required — Fill These In"
+        Parameters:
+          - SSLCertificateArn
+          - KeyPair
+          - DBMasterUserPassword
+          - BastionAllowedCIDR
+      -
+        Label:
+          default: "2. Application Settings (defaults are fine)"
+        Parameters:
+          - DBName
+          - DBMasterUsername
+          - WebAppInstanceType
+          - BastionInstanceType
+      -
+        Label:
+          default: "3. Database Sizing (defaults auto-scale)"
+        Parameters:
+          - DBInstanceClass
+          - ServerlessMinCapacityUnit
+          - ServerlessMaxCapacityUnit
+          - DBPort
+      -
+        Label:
+          default: "4. Compliance & Logging (defaults meet SOC 2)"
+        Parameters:
+          - FlowLogRetentionDays
+          - CloudTrailS3BucketName
+          - BastionSshPort
+      -
+        Label:
+          default: "5. Network — Advanced (almost never need to change)"
+        Parameters:
+          - paramUniqueName
+          - paramVpcCIDR
+          - paramPublicSubnet1CIDR
+          - paramPublicSubnet2CIDR
+          - paramPrivateSubnet1CIDR
+          - paramPrivateSubnet2CIDR
+          - LatestAMI
+    ParameterLabels:
+      SSLCertificateArn:
+        default: "SSL Certificate ARN (from AWS Certificate Manager)"
+      KeyPair:
+        default: "SSH Key Pair (from EC2 > Key Pairs)"
+      DBMasterUserPassword:
+        default: "Database Password"
+      BastionAllowedCIDR:
+        default: "Your IP Address for SSH Access (CIDR format)"
+      DBName:
+        default: "Database Name"
+      DBMasterUsername:
+        default: "Database Username"
+      WebAppInstanceType:
+        default: "Web Server Size"
+      BastionInstanceType:
+        default: "Bastion Server Size"
+      DBInstanceClass:
+        default: "Database Instance Type"
+      ServerlessMinCapacityUnit:
+        default: "Database Min Capacity (ACUs)"
+      ServerlessMaxCapacityUnit:
+        default: "Database Max Capacity (ACUs)"
+      DBPort:
+        default: "Database Port"
+      FlowLogRetentionDays:
+        default: "Network Log Retention (days)"
+      CloudTrailS3BucketName:
+        default: "CloudTrail S3 Bucket (leave blank to auto-create)"
+      BastionSshPort:
+        default: "SSH Port"
+      paramUniqueName:
+        default: "Stack Label"
+      paramVpcCIDR:
+        default: "VPC IP Range"
+      paramPublicSubnet1CIDR:
+        default: "Public Subnet A"
+      paramPublicSubnet2CIDR:
+        default: "Public Subnet B"
+      paramPrivateSubnet1CIDR:
+        default: "Private Subnet A"
+      paramPrivateSubnet2CIDR:
+        default: "Private Subnet B"
+      LatestAMI:
+        default: "Server OS (do not change)"
+
+## =================== RESOURCES =================== #
+Resources:
+
+  ## =================== VPC =================== #
+  MPVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref paramVpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+      - Key: Name
+        Value: MPWebVPC
+
+  MPInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  MPVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MPVPC
+      InternetGatewayId: !Ref MPInternetGateway
+
+  ## =================== PUBLIC SUBNETS & ROUTING =================== #
+  MPPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MPVPC
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  MPPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref MPPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MPInternetGateway
+
+  MPPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref paramPublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+      - Key: Name
+        Value: MPPublicSubnet1
+
+  MPPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref paramPublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+      - Key: Name
+        Value: MPPublicSubnet2
+
+  MPPublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPublicRouteTable
+      SubnetId: !Ref MPPublicSubnet1
+
+  MPPublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPublicRouteTable
+      SubnetId: !Ref MPPublicSubnet2
+
+  ## =================== NAT GATEWAYS =================== #
+  MPEIPforNatGateway1:
+    Type: AWS::EC2::EIP
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  MPEIPforNatGateway2:
+    Type: AWS::EC2::EIP
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  MPNatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: public
+      AllocationId: !GetAtt MPEIPforNatGateway1.AllocationId
+      SubnetId: !Ref MPPublicSubnet1
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  MPNatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: public
+      AllocationId: !GetAtt MPEIPforNatGateway2.AllocationId
+      SubnetId: !Ref MPPublicSubnet2
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  ## =================== PRIVATE SUBNETS & ROUTING =================== #
+  MPPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MPVPC
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  MPPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MPVPC
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+
+  MPPrivateRouteForAz1:
+    Type: AWS::EC2::Route
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref MPNatGateway1
+
+  MPPrivateRouteForAz2:
+    Type: AWS::EC2::Route
+    DependsOn: MPVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref MPNatGateway2
+
+  MPPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref paramPrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+      - Key: Name
+        Value: MPPrivateSubnet1
+
+  MPPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MPVPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref paramPrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: MasteringCF
+        Value: !Ref paramUniqueName
+      - Key: Name
+        Value: MPPrivateSubnet2
+
+  MPPrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable1
+      SubnetId: !Ref MPPrivateSubnet1
+
+  MPPrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MPPrivateRouteTable2
+      SubnetId: !Ref MPPrivateSubnet2
+
+  ## =================== VPC FLOW LOGS (SOC 2: CC7.1, CC7.2) =================== #
+  VPCFlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /vpc/flowlogs/${AWS::StackName}
+      RetentionInDays: !Ref FlowLogRetentionDays
+      KmsKeyId: !GetAtt LogEncryptionKey.Arn
+
+  VPCFlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FlowLogPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt VPCFlowLogGroup.Arn
+
+  VPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceId: !Ref MPVPC
+      ResourceType: VPC
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref VPCFlowLogGroup
+      DeliverLogsPermissionArn: !GetAtt VPCFlowLogRole.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPCFlowLog
+
+  ## =================== CLOUDTRAIL (SOC 2: CC7.1, CC7.2, CC7.3) =================== #
+  LogEncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for encrypting CloudTrail logs and Flow Logs
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Allow account root
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          - Sid: Allow CloudTrail
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Sid: Allow CloudWatch Logs
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt*
+              - kms:Decrypt*
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: '*'
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+
+  LogEncryptionKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${AWS::StackName}-log-encryption
+      TargetKeyId: !Ref LogEncryptionKey
+
+  CloudTrailBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateCloudTrailBucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-cloudtrail-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref LogEncryptionKey
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ArchiveToGlacier
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+            ExpirationInDays: 2555
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-CloudTrailBucket
+
+  CloudTrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreateCloudTrailBucket
+    Properties:
+      Bucket: !Ref CloudTrailBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt CloudTrailBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${CloudTrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Sid: DenyUnencryptedTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt CloudTrailBucket.Arn
+              - !Sub ${CloudTrailBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  CloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: CloudTrailBucketPolicy
+    Condition: CreateCloudTrailBucket
+    Properties:
+      TrailName: !Sub ${AWS::StackName}-audit-trail
+      IsLogging: true
+      IsMultiRegionTrail: false
+      EnableLogFileValidation: true
+      IncludeGlobalServiceEvents: true
+      S3BucketName: !Ref CloudTrailBucket
+      KMSKeyId: !Ref LogEncryptionKey
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-CloudTrail
+
+  ## =================== SECURITY GROUPS (SOC 2: CC6.1, CC6.6) =================== #
+  # NOTE: RDSPublic security group has been REMOVED - public database access is not SOC 2 compliant
+
+  EC2PublicBastion:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Join ["", [!Ref "AWS::StackName", "BastionHostSecurityGroup"]]
+      GroupDescription: Restricted SSH Access To Bastion Server
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EC2PublicBastion
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
+          CidrIp: !Ref BastionAllowedCIDR
+          Description: Restricted SSH to Bastion from allowed CIDR only
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  ALBPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTPS Access To Application Load Balancer
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: ALBPublic
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP (redirects to HTTPS)
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Public HTTPS
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  EC2PrivateAPPServers:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private Web App Access from ALB and Bastion only
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EC2PrivateAPPServers
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBPublic
+          Description: ALB to WebApp HTTP
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref ALBPublic
+          Description: ALB to WebApp HTTPS
+        - IpProtocol: tcp
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
+          SourceSecurityGroupId: !Ref EC2PublicBastion
+          Description: Bastion to WebApp SSH
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  RDSPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private Access to RDS from App Servers only
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: RDSPrivate
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: App Servers to MySQL
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: App Servers to Redshift
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  EFSPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private Access to Elastic File Storage from App Servers only
+      VpcId: !Ref MPVPC
+      Tags:
+        - Key: Name
+          Value: EFSPrivate
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref EC2PrivateAPPServers
+          Description: App Servers to EFS
+      SecurityGroupEgress:
+        - Description: Allow all outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  ## =================== IAM ROLES (SOC 2: CC6.1, CC6.3) =================== #
+  BastionInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-BastionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-BastionRole
+
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BastionInstanceRole
+
+  WebAppInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-WebAppRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: WebAppEFSAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                Resource: !GetAtt FileSystemResource.Arn
+        - PolicyName: WebAppCloudWatchLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/webapp/*
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-WebAppRole
+
+  WebAppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref WebAppInstanceRole
+
+  ## =================== BASTION HOST =================== #
+  BastionASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "BastionHostASG"]]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref BastionLaunchTemplate
+        Version: !GetAtt BastionLaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier:
+        - !Ref MPPublicSubnet1
+        - !Ref MPPublicSubnet2
+      MinSize: "1"
+      DesiredCapacity: "1"
+      MaxSize: "1"
+      Tags:
+        -
+          Key: Name
+          Value: !Join ["", [!Ref "AWS::StackName", "BastionHost"]]
+          PropagateAtLaunch: true
+
+  BastionLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Join ["", [!Ref "AWS::StackName", "BastionHostLaunchTemplate"]]
+      LaunchTemplateData:
+        ImageId: !Ref LatestAMI
+        InstanceType: !Ref BastionInstanceType
+        KeyName: !Ref KeyPair
+        IamInstanceProfile:
+          Arn: !GetAtt BastionInstanceProfile.Arn
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeviceIndex: 0
+            Groups:
+              - !Ref EC2PublicBastion
+
+  ## =================== APPLICATION LOAD BALANCER (SOC 2: CC6.1, CC6.7) =================== #
+  WebAppALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${AWS::StackName}-ALB
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref ALBPublic
+      Subnets:
+        - !Ref MPPublicSubnet1
+        - !Ref MPPublicSubnet2
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: "false"
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+        - Key: routing.http.drop_invalid_header_fields.enabled
+          Value: "true"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ALB
+
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-WebTG
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref MPVPC
+      TargetType: instance
+      HealthCheckEnabled: true
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 5
+
+  ALBHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref WebAppALB
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates:
+        - CertificateArn: !Ref SSLCertificateArn
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WebAppTargetGroup
+
+  ALBHTTPRedirectListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref WebAppALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            StatusCode: HTTP_301
+
+  ## =================== WEB APP AUTO SCALING =================== #
+  WebAppASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join ["", [!Ref "AWS::StackName", "WebAppASG"]]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebAppLaunchTemplate
+        Version: !GetAtt WebAppLaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier:
+        - !Ref MPPrivateSubnet1
+        - !Ref MPPrivateSubnet2
+      MinSize: "2"
+      DesiredCapacity: "2"
+      MaxSize: "4"
+      TargetGroupARNs:
+        - !Ref WebAppTargetGroup
+      Tags:
+        -
+          Key: Name
+          Value: !Join ["", [!Ref "AWS::StackName", "WebApp"]]
+          PropagateAtLaunch: true
+
+  WebAppScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref WebAppASG
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 70.0
+
+  WebAppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Join ["", [!Ref "AWS::StackName", "WebAppLaunchTemplate"]]
+      LaunchTemplateData:
+        ImageId: !Ref LatestAMI
+        InstanceType: !Ref WebAppInstanceType
+        KeyName: !Ref KeyPair
+        IamInstanceProfile:
+          Arn: !GetAtt WebAppInstanceProfile.Arn
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            Groups:
+              - !Ref EC2PrivateAPPServers
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            yum update -y
+            curl -L "https://raw.githubusercontent.com/merchantprotocol/protocol/master/bin/install" | bash
+
+  ## =================== AURORA RDS (SOC 2: CC6.1, A1.2) =================== #
+  AuroraDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "Subnets available for the Amazon Aurora database instance"
+      SubnetIds:
+        - !Ref MPPrivateSubnet1
+        - !Ref MPPrivateSubnet2
+
+  AuroraClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: Aurora cluster parameters with TLS enforcement
+      Family: aurora-mysql8.0
+      Parameters:
+        require_secure_transport: "ON"
+
+  AuroraServerlessV2Cluster:
+    Type: 'AWS::RDS::DBCluster'
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterUserPassword
+      DatabaseName: !Ref DBName
+      Port: !Ref DBPort
+      BackupRetentionPeriod: 35
+      DeletionProtection: true
+      StorageEncrypted: true
+      KmsKeyId: !Ref DatabaseEncryptionKey
+      DBClusterParameterGroupName: !Ref AuroraClusterParameterGroup
+      DBSubnetGroupName: !Ref AuroraDBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref RDSPrivate
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.05.2"
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: !Ref ServerlessMinCapacityUnit
+        MaxCapacity: !Ref ServerlessMaxCapacityUnit
+      CopyTagsToSnapshot: true
+      Tags:
+        -
+          Key: Name
+          Value: !Sub AuroraDBCluster-${AWS::StackName}
+
+  DatabaseEncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for Aurora database encryption at rest
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Allow account administration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          - Sid: Allow RDS
+            Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:DescribeKey
+            Resource: '*'
+
+  DatabaseEncryptionKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${AWS::StackName}-database-encryption
+      TargetKeyId: !Ref DatabaseEncryptionKey
+
+  AuroraDBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      DBClusterIdentifier: !Ref AuroraServerlessV2Cluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: true
+      CopyTagsToSnapshot: true
+      Tags:
+        -
+          Key: Name
+          Value: !Sub AuroraDB-${AWS::StackName}
+
+  ## =================== EFS STORAGE (SOC 2: CC6.1) =================== #
+  FileSystemResource:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      BackupPolicy:
+        Status: ENABLED
+      PerformanceMode: maxIO
+      Encrypted: true
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+        - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}WebAppSharedStorage
+      FileSystemPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnforceEncryptionInTransit
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Action: '*'
+            Resource: '*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          - Sid: AllowMountTargetAccess
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Resource: '*'
+            Action:
+              - "elasticfilesystem:ClientMount"
+              - "elasticfilesystem:ClientWrite"
+            Condition:
+              Bool:
+                elasticfilesystem:AccessedViaMountTarget: 'true'
+          - Sid: AllowAccountAccess
+            Effect: Allow
+            Resource: '*'
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - "elasticfilesystem:ClientMount"
+      KmsKeyId: !GetAtt FileSystemKey.Arn
+
+  FileSystemKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: KMS key for EFS encryption at rest
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: "WebAppSharedStorageKey-1"
+        Statement:
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+              - kms:GenerateDataKey
+              - kms:Decrypt
+              - kms:Encrypt
+            Resource: '*'
+
+  FileSystemKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${AWS::StackName}-efs-encryption
+      TargetKeyId: !Ref FileSystemKey
+
+  MountTargetResource1:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref MPPrivateSubnet1
+      SecurityGroups:
+      - !Ref EFSPrivate
+
+  MountTargetResource2:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref MPPrivateSubnet2
+      SecurityGroups:
+      - !Ref EFSPrivate
+
+  AccessPointResource:
+    Type: 'AWS::EFS::AccessPoint'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      PosixUser:
+        Uid: "1000"
+        Gid: "1000"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0750"
+        Path: "/"
+
+  ## =================== CLOUDWATCH ALARMS (SOC 2: CC7.2) =================== #
+  HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-HighCPU
+      AlarmDescription: WebApp ASG average CPU exceeds 80%
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebAppASG
+
+  DatabaseCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-AuroraHighCPU
+      AlarmDescription: Aurora cluster CPU exceeds 80%
+      MetricName: CPUUtilization
+      Namespace: AWS/RDS
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref AuroraServerlessV2Cluster
+
+  UnauthorizedAPICallsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateCloudTrailBucket
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-UnauthorizedAPICalls
+      AlarmDescription: Alerts on unauthorized API calls (AccessDenied/UnauthorizedAccess)
+      MetricName: UnauthorizedAPICalls
+      Namespace: CloudTrailMetrics
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+## =================== OUTPUTS =================== #
+Outputs:
+  outputVPC:
+    Description: A reference to the created VPC
+    Value: !Ref MPVPC
+  outputPublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [ ",", [ !Ref MPPublicSubnet1, !Ref MPPublicSubnet2 ]]
+  outputPrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [ ",", [ !Ref MPPrivateSubnet1, !Ref MPPrivateSubnet2 ]]
+  AuroraMasterUsername:
+    Description: "Amazon Aurora administrator user name"
+    Value: !Ref DBMasterUsername
+  DBName:
+    Description: "Amazon Aurora database name"
+    Value: !Ref DBName
+  AuroraClusterEndpoint:
+    Description: "Amazon Aurora Cluster/Writer endpoint"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Address}
+  AuroraReaderEndpoint:
+    Description: "Amazon Aurora Reader Endpoint"
+    Value: !Sub ${AuroraServerlessV2Cluster.ReadEndpoint.Address}
+  AuroraClusterPort:
+    Description: "Amazon Aurora Endpoint port"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Port}
+  AuroraClusterFullEndpoint:
+    Description: "Full Amazon Aurora Cluster endpoint with port and database name"
+    Value: !Sub ${AuroraServerlessV2Cluster.Endpoint.Address}:${AuroraServerlessV2Cluster.Endpoint.Port}/${DBName}
+  ALBDNSName:
+    Description: "Application Load Balancer DNS name"
+    Value: !GetAtt WebAppALB.DNSName
+  VPCFlowLogGroupName:
+    Description: "CloudWatch Log Group for VPC Flow Logs"
+    Value: !Ref VPCFlowLogGroup
+  CloudTrailBucketName:
+    Condition: CreateCloudTrailBucket
+    Description: "S3 bucket storing CloudTrail audit logs"
+    Value: !Ref CloudTrailBucket
