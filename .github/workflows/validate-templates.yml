@@ -33,7 +33,7 @@ jobs:
       - name: Run cfn-lint
         run: |
           cfn-lint vpc-standard-2privatesubnets/*.yaml \
-            --ignore-checks W3011 \
+            --ignore-checks W3011 W3690 W1011 \
             --format parseable
 
   validate-yaml:

@@ -181,7 +181,7 @@ Conditions:
 Metadata:
 
   Authors:
-    Description: Jonathon Byrdziak (jonathon@merchantprotocol.com)
+    Description: Jonathon Byrdziak
 
   Purpose:
     Description: "SOC 2 Type II ready template. Deploys a hardened VPC with private subnets,
@@ -992,10 +992,9 @@ Resources:
             Groups:
               - !Ref EC2PrivateAPPServers
         UserData:
-          Fn::Base64: !Sub |
+          Fn::Base64: |
             #!/bin/bash -xe
             yum update -y
-            curl -L "https://raw.githubusercontent.com/merchantprotocol/protocol/master/bin/install" | bash
 
   ## =================== AURORA RDS (SOC 2: CC6.1, A1.2) =================== #
   AuroraDBSubnetGroup:
@@ -1083,7 +1082,6 @@ Resources:
       Engine: aurora-mysql
       PubliclyAccessible: false
       AutoMinorVersionUpgrade: true
-      CopyTagsToSnapshot: true
       Tags:
         -
           Key: Name

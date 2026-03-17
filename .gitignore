@@ -1,0 +1,40 @@
+# Keys and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.credentials
+*.secret
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Terraform (in case anyone tests with TF)
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# CloudFormation packaging artifacts
+packaged-*.yaml
+packaged-*.json
+
+# Node (if using cfn-lint locally)
+node_modules/
+
+# Python (if using cfn-lint locally)
+__pycache__/
+*.pyc
+.venv/
