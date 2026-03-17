@@ -1002,7 +1002,7 @@ Resources:
       VpcSecurityGroupIds:
         - !Ref RDSPrivate
       Engine: aurora-mysql
-      EngineVersion: "8.0.mysql_aurora.3.05.2"
+      EngineVersion: "8.0.mysql_aurora.3.08.0"
       ServerlessV2ScalingConfiguration:
         MinCapacity: !Ref ServerlessMinCapacityUnit
         MaxCapacity: !Ref ServerlessMaxCapacityUnit
