@@ -880,7 +880,7 @@ Resources:
       VpcId: !Ref MPVPC
       TargetType: instance
       HealthCheckEnabled: true
-      HealthCheckPath: /
+      HealthCheckPath: /health
       HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
@@ -927,6 +927,8 @@ Resources:
       MinSize: "2"
       DesiredCapacity: "2"
       MaxSize: "4"
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
       TargetGroupARNs:
         - !Ref WebAppTargetGroup
       Tags:
@@ -963,9 +965,24 @@ Resources:
             Groups:
               - !Ref EC2PrivateAPPServers
         UserData:
-          Fn::Base64: |
+          Fn::Base64: !Sub |
             #!/bin/bash -xe
             yum update -y
+            yum install -y nginx
+
+            # Default page
+            cat > /usr/share/nginx/html/index.html << 'HTMLEOF'
+            <!DOCTYPE html>
+            <html><head><title>${AWS::StackName}</title></head>
+            <body><h1>${AWS::StackName} is running</h1></body></html>
+            HTMLEOF
+
+            # Health check endpoint
+            mkdir -p /usr/share/nginx/html/health
+            echo '{"status":"healthy"}' > /usr/share/nginx/html/health/index.html
+
+            systemctl enable nginx
+            systemctl start nginx
 
   ## =================== AURORA RDS (SOC 2: CC6.1, A1.2) =================== #
   AuroraDBSubnetGroup:
